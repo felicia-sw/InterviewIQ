@@ -55,43 +55,46 @@ struct LiveRatingScreen: View {
         .animation(.easeInOut, value: viewModel.showOfflineBanner)
     }
 
-    // MARK: - Rating screen
+    // MARK: - Rating screen (Studio "Stage")
 
     private var ratingScreen: some View {
         VStack(spacing: 0) {
             progressHeader
 
             ScrollView {
-                if let question = viewModel.currentQuestion {
-                    QuestionScoringView(
-                        question: question,
-                        questionNumber: viewModel.currentQuestionIndex + 1,
-                        totalQuestions: viewModel.questions.count,
-                        score: Binding(
-                            get: { viewModel.currentScore?.score ?? 0 },
-                            set: { newScore in
-                                viewModel.updateScore(
-                                    score: newScore,
-                                    notes: viewModel.currentScore?.notes ?? ""
-                                )
-                            }
-                        ),
-                        notes: Binding(
-                            get: { viewModel.currentScore?.notes ?? "" },
-                            set: { newNotes in
-                                viewModel.updateScore(
-                                    score: viewModel.currentScore?.score ?? 0,
-                                    notes: newNotes
-                                )
-                            }
+                VStack(spacing: Studio.Spacing.md) {
+                    if let question = viewModel.currentQuestion {
+                        QuestionScoringView(
+                            question: question,
+                            questionNumber: viewModel.currentQuestionIndex + 1,
+                            totalQuestions: viewModel.questions.count,
+                            score: Binding(
+                                get: { viewModel.currentScore?.score ?? 0 },
+                                set: { newScore in
+                                    viewModel.updateScore(
+                                        score: newScore,
+                                        notes: viewModel.currentScore?.notes ?? ""
+                                    )
+                                }
+                            ),
+                            notes: Binding(
+                                get: { viewModel.currentScore?.notes ?? "" },
+                                set: { newNotes in
+                                    viewModel.updateScore(
+                                        score: viewModel.currentScore?.score ?? 0,
+                                        notes: newNotes
+                                    )
+                                }
+                            )
                         )
-                    )
-                    .padding()
 
-                    questionDots
-                        .padding(.bottom, 8)
+                        questionDots
+                            .padding(.bottom, Studio.Spacing.xs)
+                    }
                 }
+                .padding(Studio.Spacing.md)
             }
+            .scrollContentBackground(.hidden)
 
             navigationBar
         }
@@ -105,38 +108,51 @@ struct LiveRatingScreen: View {
                 .disabled(viewModel.isSubmitting)
             }
         }
+        .studioStage()
     }
 
     // MARK: - Progress header
 
     private var progressHeader: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: Studio.Spacing.xs) {
             HStack {
                 Text("Question \(viewModel.currentQuestionIndex + 1) of \(viewModel.questions.count)")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.white.opacity(0.6))
                 Spacer()
                 Text("\(viewModel.answeredCount) / \(viewModel.questions.count) scored")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundStyle(viewModel.allAnswered ? .green : .secondary)
+                    .foregroundStyle(viewModel.allAnswered ? Studio.Palette.scoreHigh : .white.opacity(0.85))
             }
 
-            ProgressView(
-                value: Double(viewModel.answeredCount),
-                total: Double(max(viewModel.questions.count, 1))
-            )
-            .tint(viewModel.allAnswered ? .green : Color.accentColor)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.12))
+                    Capsule()
+                        .fill(viewModel.allAnswered
+                              ? AnyShapeStyle(Studio.Palette.scoreHigh)
+                              : AnyShapeStyle(Studio.auroraGradient))
+                        .frame(width: geo.size.width * progressFraction)
+                }
+            }
+            .frame(height: 6)
+            .animation(.smooth, value: viewModel.answeredCount)
         }
-        .padding(.horizontal)
-        .padding(.vertical, 12)
-        .background(.regularMaterial)
+        .padding(.horizontal, Studio.Spacing.md)
+        .padding(.vertical, Studio.Spacing.sm)
+        .background(.ultraThinMaterial)
+    }
+
+    private var progressFraction: CGFloat {
+        let total = max(viewModel.questions.count, 1)
+        return CGFloat(viewModel.answeredCount) / CGFloat(total)
     }
 
     // MARK: - Question dot indicators
 
     private var questionDots: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Studio.Spacing.xs) {
             // Array(enumerated()) snapshots questions into a copy so the body
             // never subscripts the live viewModel.questions — prevents a crash
             // when questions is reassigned from a background thread between the
@@ -144,11 +160,15 @@ struct LiveRatingScreen: View {
             ForEach(Array(viewModel.questions.enumerated()), id: \.element.id) { index, question in
                 let answered = viewModel.scores[question.id]?.isAnswered == true
                 let isCurrent = index == viewModel.currentQuestionIndex
-                Circle()
-                    .fill(isCurrent ? Color.accentColor : (answered ? Color.green : Color.secondary.opacity(0.3)))
-                    .frame(width: isCurrent ? 10 : 7, height: isCurrent ? 10 : 7)
+                Capsule()
+                    .fill(isCurrent
+                          ? AnyShapeStyle(Studio.auroraGradient)
+                          : (answered
+                             ? AnyShapeStyle(Studio.Palette.scoreHigh)
+                             : AnyShapeStyle(Color.white.opacity(0.2))))
+                    .frame(width: isCurrent ? 22 : 7, height: 7)
                     .onTapGesture { viewModel.jumpToQuestion(at: index) }
-                    .animation(.easeInOut(duration: 0.2), value: viewModel.currentQuestionIndex)
+                    .animation(.snappy(duration: 0.2), value: viewModel.currentQuestionIndex)
             }
         }
     }
@@ -156,14 +176,13 @@ struct LiveRatingScreen: View {
     // MARK: - Navigation bar
 
     private var navigationBar: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Studio.Spacing.sm) {
             Button {
                 viewModel.goToPreviousQuestion()
             } label: {
                 Label("Previous", systemImage: "chevron.left")
-                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(StageSecondaryButtonStyle())
             .disabled(viewModel.isFirstQuestion || viewModel.isSubmitting)
 
             if viewModel.isLastQuestion {
@@ -174,29 +193,24 @@ struct LiveRatingScreen: View {
                         ProgressView()
                             .progressViewStyle(.circular)
                             .tint(.white)
-                            .frame(maxWidth: .infinity)
                     } else {
                         Label("Submit", systemImage: "checkmark.seal.fill")
-                            .frame(maxWidth: .infinity)
                     }
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(viewModel.allAnswered ? .green : Color.accentColor)
+                .buttonStyle(StagePrimaryButtonStyle(tint: viewModel.allAnswered ? Studio.Palette.scoreHigh : nil))
                 .disabled(!viewModel.allAnswered || viewModel.isSubmitting)
             } else {
                 Button {
                     viewModel.goToNextQuestion()
                 } label: {
                     Label("Next", systemImage: "chevron.right")
-                        .labelStyle(.titleAndIcon)
-                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(StagePrimaryButtonStyle())
                 .disabled(viewModel.isSubmitting)
             }
         }
-        .padding()
-        .background(.regularMaterial)
+        .padding(Studio.Spacing.md)
+        .background(.ultraThinMaterial)
     }
 }
 

@@ -3,6 +3,8 @@
 //  InterviewIQ
 //
 //  Created by Clarice Harijanto on 01/06/26.
+//  Restyled to the Studio "Workspace" state: a bento header (top-candidate
+//  hero ring + avg/count tiles) over a ledger of contextually-tinted rows.
 //
 
 import SwiftUI
@@ -85,58 +87,96 @@ struct DashboardComparisonView: View {
 
     private var dashboardContent: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                summaryCard
-                rankingList
+            VStack(spacing: Studio.Spacing.lg) {
+                bentoHeader
+                ledger
             }
-            .padding()
+            .padding(Studio.Spacing.md)
         }
+        .background(Studio.Palette.canvas.ignoresSafeArea())
     }
 
-    // MARK: - Summary Card
+    // MARK: - Bento Header
 
-    private var summaryCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(sessionTitle)
-                .font(.headline)
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 0) {
-                statCell(label: "Candidates", value: "\(viewModel.rankedCandidates.count)")
-                Divider().frame(height: 36)
-                statCell(label: "Avg Score", value: "\(viewModel.averageScore)%")
-                Divider().frame(height: 36)
-                statCell(label: "Top Score", value: "\(viewModel.topCandidate?.totalScore ?? 0)%")
+    private var bentoHeader: some View {
+        VStack(spacing: Studio.Spacing.sm) {
+            heroTile
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: Studio.Spacing.sm),
+                    GridItem(.flexible(), spacing: Studio.Spacing.sm)
+                ],
+                spacing: Studio.Spacing.sm
+            ) {
+                avgTile
+                countTile
             }
         }
-        .padding()
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 14))
     }
 
-    private func statCell(label: String, value: String) -> some View {
-        VStack(spacing: 4) {
-            Text(value)
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundStyle(Color.brandPurple)
-            Text(label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+    // Full-width hero: top candidate with a big score ring.
+    private var heroTile: some View {
+        HStack(spacing: Studio.Spacing.md) {
+            VStack(alignment: .leading, spacing: Studio.Spacing.xxs) {
+                Text("Top Candidate")
+                    .font(.subheadline).fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+                Text(viewModel.topCandidate?.name ?? "—")
+                    .font(.title2).fontWeight(.bold)
+                    .lineLimit(1)
+                if let submitted = viewModel.topCandidate?.submittedAt {
+                    Text("Submitted \(submitted, style: .relative) ago")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: Studio.Spacing.sm)
+            ScoreRing(score: viewModel.topCandidate?.totalScore ?? 0, size: 88, lineWidth: 10)
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .studioCard(radius: Studio.Radius.hero, padding: Studio.Spacing.lg)
     }
 
-    // MARK: - Ranking List
+    private var avgTile: some View {
+        VStack(spacing: Studio.Spacing.sm) {
+            ScoreRing(score: viewModel.averageScore, size: 72, lineWidth: 8)
+            Text("Avg Score")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, minHeight: 116)
+        .studioCard()
+    }
 
-    private var rankingList: some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private var countTile: some View {
+        VStack(alignment: .leading, spacing: Studio.Spacing.xxs) {
+            Text("\(viewModel.rankedCandidates.count)")
+                .font(.system(size: 40, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(Studio.Palette.accent)
+            Text("Candidates")
+                .font(.caption).foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+            if let top = viewModel.topCandidate {
+                Text("Top \(top.totalScore)%")
+                    .font(.caption).fontWeight(.semibold)
+                    .foregroundStyle(Studio.scoreColor(for: top.totalScore))
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 116, alignment: .leading)
+        .studioCard()
+    }
+
+    // MARK: - Ledger
+
+    private var ledger: some View {
+        VStack(alignment: .leading, spacing: Studio.Spacing.sm) {
             Text("Rankings")
-                .font(.title3)
-                .fontWeight(.semibold)
+                .font(.title3).fontWeight(.semibold)
+                .padding(.horizontal, Studio.Spacing.xxs)
 
-            ForEach(viewModel.rankedCandidates) { candidate in
-                CandidateRankRow(candidate: candidate)
+            VStack(spacing: Studio.Spacing.xs) {
+                ForEach(viewModel.rankedCandidates) { candidate in
+                    LedgerRow(candidate: candidate)
+                }
             }
         }
     }
@@ -168,77 +208,55 @@ struct DashboardComparisonView: View {
     }
 }
 
-// MARK: - Candidate Rank Row
+// MARK: - Ledger Row
 
-private struct CandidateRankRow: View {
+// Editorial "Ledger" row: a large rank numeral, the name, a per-question
+// sparkline, a tinted score spine, and the percentage — the whole row washed
+// with a faint monochromatic tint of its score (Studio contextual tinting).
+private struct LedgerRow: View {
     let candidate: RankedCandidate
 
-    private var rankColor: Color {
-        switch candidate.rank {
-        case 1: return .yellow
-        case 2: return Color(red: 0.75, green: 0.75, blue: 0.75)    // silver
-        case 3: return Color(red: 0.8, green: 0.5, blue: 0.2)        // bronze
-        default: return .secondary.opacity(0.4)
-        }
-    }
-
-    private var scoreColor: Color {
-        switch candidate.totalScore {
-        case 80...100: return .green
-        case 60..<80:  return .orange
-        default:       return .red
-        }
-    }
+    private var scoreColor: Color { Studio.scoreColor(for: candidate.totalScore) }
+    private var sparkValues: [Int] { candidate.questionScores.map(\.score) }
 
     var body: some View {
-        HStack(spacing: 14) {
-            // Rank badge
-            ZStack {
-                Circle()
-                    .fill(rankColor.opacity(candidate.rank <= 3 ? 0.2 : 0.08))
-                    .frame(width: 44, height: 44)
-                Text("#\(candidate.rank)")
-                    .font(.system(size: 14, weight: .bold, design: .rounded))
-                    .foregroundStyle(candidate.rank <= 3 ? rankColor : .secondary)
-            }
+        HStack(spacing: Studio.Spacing.md) {
+            // Rank numeral — bold + tinted for the podium, light + muted otherwise.
+            Text("\(candidate.rank)")
+                .font(.system(size: 34, weight: candidate.rank <= 3 ? .bold : .light, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(candidate.rank <= 3 ? scoreColor : .secondary)
+                .frame(width: 40, alignment: .leading)
 
-            // Name + submitted timestamp
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: Studio.Spacing.xxs) {
                 Text(candidate.name)
                     .font(.headline)
 
-                if let submitted = candidate.submittedAt {
+                if sparkValues.count >= 2 {
+                    Sparkline(values: sparkValues, color: scoreColor.opacity(0.7))
+                        .frame(height: 16)
+                } else if let submitted = candidate.submittedAt {
                     Text("Submitted \(submitted, style: .relative) ago")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
-            }
 
-            Spacer()
-
-            // Score gauge
-            VStack(alignment: .trailing, spacing: 4) {
-                Text("\(candidate.totalScore)%")
-                    .font(.title3)
-                    .fontWeight(.bold)
-                    .foregroundStyle(scoreColor)
-
-                // Mini progress bar
+                // Score spine
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(Color.secondary.opacity(0.15))
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(scoreColor)
+                        Capsule().fill(.secondary.opacity(0.15))
+                        Capsule().fill(scoreColor)
                             .frame(width: geo.size.width * CGFloat(candidate.totalScore) / 100)
                     }
                 }
-                .frame(width: 60, height: 6)
+                .frame(height: 5)
             }
+
+            Text("\(candidate.totalScore)%")
+                .font(.title3).fontWeight(.bold)
+                .monospacedDigit()
+                .foregroundStyle(scoreColor)
         }
-        .padding()
-        .background(Color(.secondarySystemGroupedBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .studioCard(fill: Studio.scoreTint(for: candidate.totalScore), padding: Studio.Spacing.md)
     }
 }
 
@@ -253,3 +271,37 @@ struct ShareSheet: UIViewControllerRepresentable {
 
     func updateUIViewController(_ uvc: UIActivityViewController, context: Context) {}
 }
+
+// MARK: - Preview (sample data, no Firebase required)
+
+private struct LedgerPreviewHost: View {
+    private let sample: [RankedCandidate] = [
+        RankedCandidate(id: "1", name: "Maya Chen", totalScore: 91, rank: 1,
+                        submittedAt: Date(), interviewerId: "x",
+                        questionScores: [.init(questionId: "a", score: 5), .init(questionId: "b", score: 4),
+                                         .init(questionId: "c", score: 5), .init(questionId: "d", score: 4)],
+                        notes: ""),
+        RankedCandidate(id: "2", name: "Jordan Reyes", totalScore: 72, rank: 2,
+                        submittedAt: Date(), interviewerId: "x",
+                        questionScores: [.init(questionId: "a", score: 3), .init(questionId: "b", score: 4),
+                                         .init(questionId: "c", score: 2), .init(questionId: "d", score: 5)],
+                        notes: ""),
+        RankedCandidate(id: "3", name: "Sam Okafor", totalScore: 54, rank: 3,
+                        submittedAt: Date(), interviewerId: "x",
+                        questionScores: [.init(questionId: "a", score: 2), .init(questionId: "b", score: 3),
+                                         .init(questionId: "c", score: 2)],
+                        notes: "")
+    ]
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: Studio.Spacing.xs) {
+                ForEach(sample) { LedgerRow(candidate: $0) }
+            }
+            .padding()
+        }
+        .background(Studio.Palette.canvas)
+    }
+}
+
+#Preview("Ledger · Workspace") { LedgerPreviewHost() }
