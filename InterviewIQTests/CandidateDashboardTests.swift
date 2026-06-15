@@ -29,7 +29,9 @@ private func makeRankedCandidate(
     totalScore: Int,
     rank: Int,
     submittedAt: Date? = nil,
-    notes: String = ""
+    notes: String = "",
+    panelistCount: Int = 1,
+    scoreSpread: Int = 0
 ) -> RankedCandidate {
     RankedCandidate(
         id: id,
@@ -39,7 +41,9 @@ private func makeRankedCandidate(
         submittedAt: submittedAt,
         interviewerId: "interviewer-1",
         questionScores: [],
-        notes: notes
+        notes: notes,
+        panelistCount: panelistCount,
+        scoreSpread: scoreSpread
     )
 }
 
@@ -218,6 +222,38 @@ final class CandidateRankingServiceTests: XCTestCase {
 
         XCTAssertGreaterThanOrEqual(result, 0)
         XCTAssertLessThanOrEqual(result, 100)
+    }
+}
+
+// MARK: - RankedCandidate — panel disagreement flag
+
+final class RankedCandidateDisagreementTests: XCTestCase {
+
+    func test_singlePanelist_neverFlagsDisagreement() {
+        // Spread is meaningless with one panelist, even if it were non-zero.
+        let c = makeRankedCandidate(name: "Alice", totalScore: 80, rank: 1,
+                                    panelistCount: 1, scoreSpread: 40)
+        XCTAssertFalse(c.hasDisagreement)
+    }
+
+    func test_multiPanelist_spreadBelowThreshold_noDisagreement() {
+        // 14 < 15 → agreement.
+        let c = makeRankedCandidate(name: "Alice", totalScore: 80, rank: 1,
+                                    panelistCount: 3, scoreSpread: 14)
+        XCTAssertFalse(c.hasDisagreement)
+    }
+
+    func test_multiPanelist_spreadAtThreshold_flagsDisagreement() {
+        // 15 is the boundary and should flag.
+        let c = makeRankedCandidate(name: "Alice", totalScore: 80, rank: 1,
+                                    panelistCount: 2, scoreSpread: 15)
+        XCTAssertTrue(c.hasDisagreement)
+    }
+
+    func test_multiPanelist_largeSpread_flagsDisagreement() {
+        let c = makeRankedCandidate(name: "Alice", totalScore: 80, rank: 1,
+                                    panelistCount: 4, scoreSpread: 42)
+        XCTAssertTrue(c.hasDisagreement)
     }
 }
 
