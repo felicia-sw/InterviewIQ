@@ -6,15 +6,29 @@ import SwiftUI
 struct SessionDashboardView: View {
     @Bindable var viewModel: SessionDashboardVM
     @State private var showingProfile = false
+    @State private var showTutorial = false
+    @AppStorage("studio.hasSeenTutorial") private var hasSeenTutorial = false
 
     var body: some View {
         NavigationStack {
-            // List is always rendered so .refreshable is always attached.
-            // Loading and empty states are handled inside the list body.
-            sessionList
-            .navigationTitle("Sessions")
-            .navigationBarTitleDisplayMode(.large)
+            VStack(spacing: 0) {
+                StudioHeader(title: "Sessions", subtitle: "Manage and run your interviews")
+                    .padding(.horizontal, Studio.Spacing.md)
+                    .padding(.top, Studio.Spacing.xs)
+                    .padding(.bottom, Studio.Spacing.sm)
+
+                sessionList
+            }
+            .background(Studio.Palette.canvas.ignoresSafeArea())
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { showTutorial = true } label: {
+                        Image(systemName: "questionmark.circle")
+                    }
+                    .accessibilityLabel("How it works")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { viewModel.showCreateSheet = true } label: {
                         Image(systemName: "plus")
@@ -29,6 +43,10 @@ struct SessionDashboardView: View {
             // Profile sheet
             .sheet(isPresented: $showingProfile) {
                 ProfileView(userId: viewModel.userId)
+            }
+            // Tutorial sheet — auto-shown once, reopenable from the "?" button
+            .sheet(isPresented: $showTutorial) {
+                TutorialView()
             }
             // Create session sheet
             .sheet(isPresented: $viewModel.showCreateSheet) {
@@ -75,58 +93,98 @@ struct SessionDashboardView: View {
             }
         }
         .task { await viewModel.loadSessions() }
+        .onAppear {
+            // First-time users get the walkthrough automatically; afterwards it
+            // lives behind the "?" button.
+            if !hasSeenTutorial {
+                hasSeenTutorial = true
+                showTutorial = true
+            }
+        }
     }
 
     // MARK: - Session list
 
     private var sessionList: some View {
-        List {
-            // Loading spinner shown as a list row so the pull-to-refresh
-            // gesture is always available regardless of load state.
-            if viewModel.isLoading && viewModel.ownedSessions.isEmpty && viewModel.assignedSessions.isEmpty {
-                HStack { Spacer(); ProgressView("Loading sessions…"); Spacer() }
-                    .listRowBackground(Color.clear)
-            } else if viewModel.ownedSessions.isEmpty && viewModel.assignedSessions.isEmpty {
-                ContentUnavailableView(
-                    "No Sessions",
-                    systemImage: "calendar.badge.plus",
-                    description: Text("Tap + to create your first session, or wait to be assigned as a panelist.")
-                )
-                .listRowBackground(Color.clear)
-            } else {
-                if !viewModel.ownedSessions.isEmpty {
-                    Section("My Sessions") {
-                        ForEach(viewModel.ownedSessions) { session in
-                            OwnedSessionRow(
-                                session: session,
-                                ownerId:      viewModel.userId,
-                                onEdit:       { viewModel.sessionToEdit    = session },
-                                onManageTeam: { viewModel.sessionForTeam   = session },
-                                onEditRubric: { viewModel.sessionForRubric = session },
-                                onDelete:     { viewModel.requestDelete(session) }
-                            )
+        ScrollView {
+            VStack(alignment: .leading, spacing: Studio.Spacing.lg) {
+                if viewModel.isLoading && viewModel.ownedSessions.isEmpty && viewModel.assignedSessions.isEmpty {
+                    ProgressView("Loading sessions…")
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 80)
+                } else if viewModel.ownedSessions.isEmpty && viewModel.assignedSessions.isEmpty {
+                    ContentUnavailableView(
+                        "No Sessions",
+                        systemImage: "calendar.badge.plus",
+                        description: Text("Tap + to create your first session, or wait to be assigned as a panelist.")
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 420)
+                } else {
+                    if !viewModel.ownedSessions.isEmpty {
+                        section(title: "My Sessions") {
+                            ForEach(viewModel.ownedSessions) { session in
+                                OwnedSessionRow(
+                                    session: session,
+                                    ownerId:      viewModel.userId,
+                                    onEdit:       { viewModel.sessionToEdit    = session },
+                                    onManageTeam: { viewModel.sessionForTeam   = session },
+                                    onEditRubric: { viewModel.sessionForRubric = session },
+                                    onDelete:     { viewModel.requestDelete(session) }
+                                )
+                            }
                         }
                     }
-                }
 
-                if !viewModel.assignedSessions.isEmpty {
-                    Section("Assigned to Me") {
-                        ForEach(viewModel.assignedSessions) { session in
-                            AssignedSessionRow(session: session, interviewerId: viewModel.userId)
+                    if !viewModel.assignedSessions.isEmpty {
+                        section(title: "Assigned to Me") {
+                            ForEach(viewModel.assignedSessions) { session in
+                                AssignedSessionRow(session: session, interviewerId: viewModel.userId)
+                            }
                         }
                     }
                 }
             }
+            .padding(.horizontal, Studio.Spacing.md)
+            .padding(.bottom, Studio.Spacing.lg)
         }
-        .listStyle(.insetGrouped)
         .refreshable { await viewModel.loadSessions() }
+    }
+
+    @ViewBuilder
+    private func section<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: Studio.Spacing.xs) {
+            Text(title)
+                .font(.studioDisplay(15, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, Studio.Spacing.xxs)
+            content()
+        }
+    }
+}
+
+// MARK: - Session icon
+
+private struct SessionIcon: View {
+    let systemName: String
+    let colors: [Color]
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: Studio.Radius.chip, style: .continuous)
+            .fill(LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing))
+            .frame(width: 46, height: 46)
+            .overlay {
+                Image(systemName: systemName)
+                    .font(.headline)
+                    .foregroundStyle(.white)
+            }
+            .shadow(color: (colors.first ?? .clear).opacity(0.3), radius: 5, y: 3)
     }
 }
 
 // MARK: - Owned session row
 
 // Full action surface for a session the current user created.
-// Primary tap → Dashboard. Context menu exposes Rate, Edit, Manage Team, Edit Rubric, Delete.
+// Primary tap → Dashboard. Context menu exposes Rate, Manage Team, Edit Rubric, Edit, Delete.
 private struct OwnedSessionRow: View {
     let session: Session
     let ownerId: String
@@ -141,18 +199,7 @@ private struct OwnedSessionRow: View {
         } label: {
             rowContent
         }
-        .foregroundStyle(.primary)
-        .swipeActions(edge: .trailing) {
-            Button(role: .destructive, action: onDelete) {
-                Label("Delete", systemImage: "trash")
-            }
-        }
-        .swipeActions(edge: .leading) {
-            Button(action: onEdit) {
-                Label("Edit", systemImage: "pencil")
-            }
-            .tint(.orange)
-        }
+        .buttonStyle(.plain)
         .contextMenu {
             NavigationLink {
                 LiveRatingScreen(sessionId: session.id, interviewerId: ownerId)
@@ -176,15 +223,9 @@ private struct OwnedSessionRow: View {
     }
 
     private var rowContent: some View {
-        HStack(spacing: 12) {
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.accentColor.opacity(0.15))
-                .frame(width: 44, height: 44)
-                .overlay {
-                    Image(systemName: "calendar")
-                        .font(.headline)
-                        .foregroundStyle(Color.accentColor)
-                }
+        HStack(spacing: Studio.Spacing.md) {
+            SessionIcon(systemName: "calendar",
+                        colors: [Studio.Palette.accent, Studio.Palette.accentAlt])
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(session.title).font(.headline)
@@ -193,24 +234,27 @@ private struct OwnedSessionRow: View {
                     .foregroundStyle(.secondary)
             }
 
-            Spacer()
+            Spacer(minLength: Studio.Spacing.sm)
 
-            Label("Owner", systemImage: "crown.fill")
-                .font(.caption2)
-                .foregroundStyle(Color.brandPurple.opacity(0.8))
-                .labelStyle(.iconOnly)
-                .padding(6)
-                .background(Color.brandPurple.opacity(0.1))
-                .clipShape(Circle())
+            // Owner badge
+            Image(systemName: "crown.fill")
+                .font(.caption)
+                .foregroundStyle(Studio.Palette.accent)
+                .padding(7)
+                .background(Studio.Palette.accent.opacity(0.12), in: Circle())
+
+            Image(systemName: "chevron.right")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.tertiary)
         }
-        .padding(.vertical, 4)
+        .studioCard(padding: Studio.Spacing.md)
     }
 }
 
 // MARK: - Assigned session row
 
 // Panelist view: tap card body → candidate list → rating.
-// Chart button → dashboard. No NavigationLink used so no chevron arrows appear.
+// Chart button → dashboard.
 private struct AssignedSessionRow: View {
     let session: Session
     let interviewerId: String
@@ -219,17 +263,11 @@ private struct AssignedSessionRow: View {
     @State private var goToDashboard = false
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: Studio.Spacing.md) {
             Button { goToRating = true } label: {
-                HStack(spacing: 12) {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.green.opacity(0.12))
-                        .frame(width: 44, height: 44)
-                        .overlay {
-                            Image(systemName: "checklist")
-                                .font(.headline)
-                                .foregroundStyle(Color.green)
-                        }
+                HStack(spacing: Studio.Spacing.md) {
+                    SessionIcon(systemName: "checklist",
+                                colors: [Studio.Palette.scoreHigh, Studio.Palette.scoreHigh.opacity(0.65)])
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(session.title)
@@ -247,14 +285,13 @@ private struct AssignedSessionRow: View {
 
             Button { goToDashboard = true } label: {
                 Image(systemName: "chart.bar.fill")
-                    .foregroundStyle(Color.brandPurple)
+                    .foregroundStyle(Studio.Palette.accent)
                     .padding(8)
-                    .background(Color.brandPurple.opacity(0.1))
-                    .clipShape(Circle())
+                    .background(Studio.Palette.accent.opacity(0.12), in: Circle())
             }
             .buttonStyle(.plain)
         }
-        .padding(.vertical, 4)
+        .studioCard(padding: Studio.Spacing.md)
         .navigationDestination(isPresented: $goToRating) {
             LiveRatingScreen(sessionId: session.id, interviewerId: interviewerId)
         }

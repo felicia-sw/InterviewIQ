@@ -7,6 +7,9 @@ struct LiveRatingScreen: View {
 
     @State private var viewModel = LiveRatingVM()
 
+    // One-time just-in-time coach mark for the first live-scoring session.
+    @AppStorage("studio.hasSeenScoringCoach") private var hasSeenScoringCoach = false
+
     var body: some View {
         // No NavigationStack here: this view is always pushed inside the
         // interviewer home's stack. Nesting stacks broke navigation (candidate
@@ -55,7 +58,7 @@ struct LiveRatingScreen: View {
         .animation(.easeInOut, value: viewModel.showOfflineBanner)
     }
 
-    // MARK: - Rating screen (Studio "Stage")
+    // MARK: - Rating screen
 
     private var ratingScreen: some View {
         VStack(spacing: 0) {
@@ -94,10 +97,10 @@ struct LiveRatingScreen: View {
                 }
                 .padding(Studio.Spacing.md)
             }
-            .scrollContentBackground(.hidden)
 
             navigationBar
         }
+        .background(Studio.Palette.canvas)
         .navigationTitle(viewModel.currentCandidate?.name ?? "Interview")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -108,7 +111,15 @@ struct LiveRatingScreen: View {
                 .disabled(viewModel.isSubmitting)
             }
         }
-        .studioStage()
+        // One-time coach mark on the very first scoring session.
+        .overlay {
+            if !hasSeenScoringCoach {
+                ScoringCoachOverlay {
+                    withAnimation(.easeInOut) { hasSeenScoringCoach = true }
+                }
+                .transition(.opacity)
+            }
+        }
     }
 
     // MARK: - Progress header
@@ -118,21 +129,21 @@ struct LiveRatingScreen: View {
             HStack {
                 Text("Question \(viewModel.currentQuestionIndex + 1) of \(viewModel.questions.count)")
                     .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(.secondary)
                 Spacer()
                 Text("\(viewModel.answeredCount) / \(viewModel.questions.count) scored")
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .foregroundStyle(viewModel.allAnswered ? Studio.Palette.scoreHigh : .white.opacity(0.85))
+                    .foregroundStyle(viewModel.allAnswered ? Studio.Palette.scoreHigh : .secondary)
             }
 
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.12))
+                    Capsule().fill(Color.secondary.opacity(0.15))
                     Capsule()
                         .fill(viewModel.allAnswered
                               ? AnyShapeStyle(Studio.Palette.scoreHigh)
-                              : AnyShapeStyle(Studio.auroraGradient))
+                              : AnyShapeStyle(Studio.accentGradient))
                         .frame(width: geo.size.width * progressFraction)
                 }
             }
@@ -141,7 +152,7 @@ struct LiveRatingScreen: View {
         }
         .padding(.horizontal, Studio.Spacing.md)
         .padding(.vertical, Studio.Spacing.sm)
-        .background(.ultraThinMaterial)
+        .background(.regularMaterial)
     }
 
     private var progressFraction: CGFloat {
@@ -162,10 +173,10 @@ struct LiveRatingScreen: View {
                 let isCurrent = index == viewModel.currentQuestionIndex
                 Capsule()
                     .fill(isCurrent
-                          ? AnyShapeStyle(Studio.auroraGradient)
+                          ? AnyShapeStyle(Studio.accentGradient)
                           : (answered
                              ? AnyShapeStyle(Studio.Palette.scoreHigh)
-                             : AnyShapeStyle(Color.white.opacity(0.2))))
+                             : AnyShapeStyle(Color.secondary.opacity(0.3))))
                     .frame(width: isCurrent ? 22 : 7, height: 7)
                     .onTapGesture { viewModel.jumpToQuestion(at: index) }
                     .animation(.snappy(duration: 0.2), value: viewModel.currentQuestionIndex)
@@ -182,7 +193,7 @@ struct LiveRatingScreen: View {
             } label: {
                 Label("Previous", systemImage: "chevron.left")
             }
-            .buttonStyle(StageSecondaryButtonStyle())
+            .buttonStyle(StudioSecondaryButtonStyle())
             .disabled(viewModel.isFirstQuestion || viewModel.isSubmitting)
 
             if viewModel.isLastQuestion {
@@ -197,7 +208,7 @@ struct LiveRatingScreen: View {
                         Label("Submit", systemImage: "checkmark.seal.fill")
                     }
                 }
-                .buttonStyle(StagePrimaryButtonStyle(tint: viewModel.allAnswered ? Studio.Palette.scoreHigh : nil))
+                .buttonStyle(StudioPrimaryButtonStyle(tint: viewModel.allAnswered ? Studio.Palette.scoreHigh : nil))
                 .disabled(!viewModel.allAnswered || viewModel.isSubmitting)
             } else {
                 Button {
@@ -205,12 +216,12 @@ struct LiveRatingScreen: View {
                 } label: {
                     Label("Next", systemImage: "chevron.right")
                 }
-                .buttonStyle(StagePrimaryButtonStyle())
+                .buttonStyle(StudioPrimaryButtonStyle())
                 .disabled(viewModel.isSubmitting)
             }
         }
         .padding(Studio.Spacing.md)
-        .background(.ultraThinMaterial)
+        .background(.regularMaterial)
     }
 }
 

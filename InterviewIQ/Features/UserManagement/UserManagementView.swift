@@ -110,7 +110,7 @@ struct UserManagementView: View {
                 }
             }
             .navigationTitle("Manage Team")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Done") { dismiss() }
@@ -135,6 +135,8 @@ struct UserManagementView: View {
             }
         }
         .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(Studio.Palette.canvas)
         .refreshable { await viewModel.load() }
     }
 
@@ -187,14 +189,11 @@ private struct PanelistRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Circle()
-                .fill(Color.brandPurple.opacity(0.15))
+            Text(panelist.fullName.prefix(1).uppercased())
+                .font(.headline)
+                .foregroundStyle(.white)
                 .frame(width: 40, height: 40)
-                .overlay {
-                    Text(panelist.fullName.prefix(1).uppercased())
-                        .font(.headline)
-                        .foregroundStyle(Color.brandPurple)
-                }
+                .background(Studio.accentGradient, in: Circle())
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(panelist.fullName)

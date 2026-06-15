@@ -1,9 +1,9 @@
 import SwiftUI
 
-// Single-question scoring card shown during UC-04 rating — Studio "Stage" style:
-// a frosted glass card on the dark aurora backdrop, with one-tap score pills
-// that "ignite" on selection. Notes are deferred behind a chip to keep the
-// surface glanceable while the interviewer is talking to the candidate.
+// Single-question scoring card shown during UC-04 rating — Studio style: a
+// clean white card on the grouped canvas with one-tap score pills that fill
+// with the accent gradient on selection. Notes are deferred behind a chip to
+// keep the surface glanceable while the interviewer is talking to the candidate.
 struct QuestionScoringView: View {
     let question: RubricQuestion
     let questionNumber: Int
@@ -19,13 +19,7 @@ struct QuestionScoringView: View {
             scoreSection
             notesSection
         }
-        .padding(Studio.Spacing.lg)
-        .background(.ultraThinMaterial,
-                    in: RoundedRectangle(cornerRadius: Studio.Radius.hero, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: Studio.Radius.hero, style: .continuous)
-                .strokeBorder(.white.opacity(0.10))
-        )
+        .studioCard(radius: Studio.Radius.hero, padding: Studio.Spacing.lg)
     }
 
     // MARK: - Question header
@@ -35,22 +29,21 @@ struct QuestionScoringView: View {
             HStack {
                 Text("Q\(questionNumber) of \(totalQuestions)")
                     .font(.caption).fontWeight(.semibold)
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(.secondary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
-                    .background(.white.opacity(0.10), in: Capsule())
+                    .background(Studio.Palette.fill, in: Capsule())
 
                 Spacer()
 
                 Text("Max \(question.maxScore) pts")
                     .font(.caption)
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(.secondary)
             }
 
             Text(question.prompt)
                 .font(.title2)
                 .fontWeight(.semibold)
-                .foregroundStyle(.white)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -62,18 +55,17 @@ struct QuestionScoringView: View {
             HStack {
                 Text("Score")
                     .font(.subheadline).fontWeight(.medium)
-                    .foregroundStyle(.white.opacity(0.8))
                 Spacer()
                 if score > 0 {
                     Text("\(score) / \(question.maxScore)")
                         .font(.subheadline).fontWeight(.semibold)
                         .monospacedDigit()
                         .contentTransition(.numericText())
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Studio.Palette.accent)
                 } else {
                     Text("Not scored")
                         .font(.subheadline)
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -88,13 +80,11 @@ struct QuestionScoringView: View {
             if showNotes || !notes.isEmpty {
                 Text("Notes")
                     .font(.subheadline).fontWeight(.medium)
-                    .foregroundStyle(.white.opacity(0.8))
 
                 TextField("Add a comment about this answer…", text: $notes, axis: .vertical)
                     .lineLimit(3...6)
-                    .foregroundStyle(.white)
                     .padding(Studio.Spacing.sm)
-                    .background(.white.opacity(0.08),
+                    .background(Studio.Palette.fill,
                                 in: RoundedRectangle(cornerRadius: Studio.Radius.chip, style: .continuous))
             } else {
                 Button {
@@ -102,7 +92,7 @@ struct QuestionScoringView: View {
                 } label: {
                     Label("Add note", systemImage: "plus")
                         .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(Studio.Palette.accent)
                 }
                 .buttonStyle(.plain)
             }
@@ -112,8 +102,9 @@ struct QuestionScoringView: View {
 
 // MARK: - Score button row
 
-// One-tap score pills (1…maxScore). The selected pill ignites with the aurora
-// gradient + a soft glow and a selection haptic. Scrolls when maxScore is large.
+// One-tap score pills (1…maxScore). The selected pill fills with the accent
+// gradient + a soft glow and fires a selection haptic. Scrolls when maxScore
+// is large.
 struct ScoreButtonRow: View {
     @Binding var score: Int
     let maxScore: Int
@@ -130,21 +121,17 @@ struct ScoreButtonRow: View {
                             .font(.system(size: 18, weight: .semibold, design: .rounded))
                             .monospacedDigit()
                             .frame(width: 52, height: 52)
-                            .foregroundStyle(isSelected ? .white : .white.opacity(0.85))
+                            .foregroundStyle(isSelected ? .white : .primary)
                             .background {
                                 let shape = RoundedRectangle(cornerRadius: Studio.Radius.chip, style: .continuous)
                                 if isSelected {
-                                    shape.fill(Studio.auroraGradient)
+                                    shape.fill(Studio.accentGradient)
                                 } else {
-                                    shape.fill(.ultraThinMaterial)
+                                    shape.fill(Studio.Palette.fill)
                                 }
                             }
-                            .overlay(
-                                RoundedRectangle(cornerRadius: Studio.Radius.chip, style: .continuous)
-                                    .strokeBorder(.white.opacity(isSelected ? 0 : 0.12))
-                            )
-                            .shadow(color: Studio.Palette.auroraViolet.opacity(isSelected ? 0.55 : 0),
-                                    radius: 14, y: 2)
+                            .shadow(color: Studio.Palette.accent.opacity(isSelected ? 0.35 : 0),
+                                    radius: 10, y: 2)
                             .scaleEffect(isSelected ? 1.06 : 1)
                     }
                     .buttonStyle(.plain)
@@ -165,24 +152,21 @@ private struct ScoringPreviewHost: View {
     @State private var notes = ""
 
     var body: some View {
-        ZStack {
-            AuroraBackground()
-            ScrollView {
-                QuestionScoringView(
-                    question: RubricQuestion(
-                        prompt: "Describe a time you resolved a conflict within a team and what you learned from it.",
-                        maxScore: 5
-                    ),
-                    questionNumber: 3,
-                    totalQuestions: 8,
-                    score: $score,
-                    notes: $notes
-                )
-                .padding()
-            }
+        ScrollView {
+            QuestionScoringView(
+                question: RubricQuestion(
+                    prompt: "Describe a time you resolved a conflict within a team and what you learned from it.",
+                    maxScore: 5
+                ),
+                questionNumber: 3,
+                totalQuestions: 8,
+                score: $score,
+                notes: $notes
+            )
+            .padding()
         }
-        .preferredColorScheme(.dark)
+        .background(Studio.Palette.canvas)
     }
 }
 
-#Preview("Live Scoring · Stage") { ScoringPreviewHost() }
+#Preview("Live Scoring · Card") { ScoringPreviewHost() }

@@ -13,6 +13,8 @@ struct CreateEditSessionView: View {
                 if viewModel.isEditMode { teamSection }
                 rubricSection
             }
+            .scrollContentBackground(.hidden)
+            .background(Studio.Palette.canvas.ignoresSafeArea())
             .navigationTitle(viewModel.isEditMode ? "Edit Session" : "New Session")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

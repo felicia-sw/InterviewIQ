@@ -135,6 +135,8 @@ struct CreateEditRubricView: View {
         NavigationStack {
             ZStack {
                 form
+                    .scrollContentBackground(.hidden)
+                    .background(Studio.Palette.canvas.ignoresSafeArea())
 
                 if viewModel.isLoading {
                     ProgressView("Loading rubric…")

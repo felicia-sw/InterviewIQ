@@ -7,16 +7,16 @@ struct CandidateListView: View {
 
     var body: some View {
         ZStack {
-            if viewModel.isLoading {
+            if viewModel.isLoading && viewModel.candidates.isEmpty {
                 ProgressView("Loading candidates…")
             } else if viewModel.candidates.isEmpty {
                 emptyState
             } else {
-                candidateList
+                content
             }
         }
-        .navigationTitle("Candidates")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 connectivityBadge
@@ -27,19 +27,85 @@ struct CandidateListView: View {
         }
     }
 
-    // MARK: - Candidate list
+    // MARK: - Content
 
-    private var candidateList: some View {
-        List(viewModel.candidates) { candidate in
-            CandidateRowView(
-                candidate: candidate,
-                status: viewModel.candidateStatus(for: candidate),
-                isLoading: viewModel.isLoading
-            ) {
-                Task { await viewModel.startInterview(with: candidate) }
+    private var content: some View {
+        ScrollView {
+            VStack(spacing: Studio.Spacing.md) {
+                StudioHeader(title: "Candidates",
+                             subtitle: "\(viewModel.candidates.count) in this session")
+
+                progressSummary
+
+                LazyVStack(spacing: Studio.Spacing.xs) {
+                    ForEach(viewModel.candidates) { candidate in
+                        CandidateCardView(
+                            candidate: candidate,
+                            status: viewModel.candidateStatus(for: candidate),
+                            isLoading: viewModel.isLoading,
+                            onStart: { Task { await viewModel.startInterview(with: candidate) } }
+                        )
+                    }
+                }
+            }
+            .padding(Studio.Spacing.md)
+        }
+        .background(Studio.Palette.canvas)
+    }
+
+    // MARK: - Progress summary
+
+    private var statuses: [String] { viewModel.candidates.map { viewModel.candidateStatus(for: $0) } }
+    private var completedCount: Int { statuses.filter { $0 == "Completed" }.count }
+    private var inProgressCount: Int { statuses.filter { $0 == "In Progress" }.count }
+    private var notStartedCount: Int { statuses.filter { $0 == "Not Started" }.count }
+
+    private var progressSummary: some View {
+        VStack(alignment: .leading, spacing: Studio.Spacing.md) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Session progress")
+                    .font(.subheadline).fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+                Text("\(completedCount) of \(viewModel.candidates.count) scored")
+                    .font(.title2).fontWeight(.bold)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+            }
+
+            pipelineBar
+
+            HStack(spacing: Studio.Spacing.lg) {
+                legend(count: completedCount, label: "Completed", color: Studio.Palette.scoreHigh)
+                legend(count: inProgressCount, label: "In progress", color: Studio.Palette.scoreMid)
+                legend(count: notStartedCount, label: "Not started", color: .secondary)
             }
         }
-        .listStyle(.insetGrouped)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .studioCard(padding: Studio.Spacing.lg)
+    }
+
+    private var pipelineBar: some View {
+        GeometryReader { geo in
+            let total = CGFloat(max(viewModel.candidates.count, 1))
+            HStack(spacing: 0) {
+                Rectangle().fill(Studio.Palette.scoreHigh)
+                    .frame(width: geo.size.width * CGFloat(completedCount) / total)
+                Rectangle().fill(Studio.Palette.scoreMid)
+                    .frame(width: geo.size.width * CGFloat(inProgressCount) / total)
+                Rectangle().fill(Color.secondary.opacity(0.18))
+            }
+        }
+        .frame(height: 10)
+        .clipShape(Capsule())
+        .animation(.smooth, value: completedCount)
+    }
+
+    private func legend(count: Int, label: String, color: Color) -> some View {
+        HStack(spacing: Studio.Spacing.xs) {
+            Circle().fill(color).frame(width: 8, height: 8)
+            Text("\(count)").font(.subheadline).fontWeight(.bold).monospacedDigit()
+            Text(label).font(.caption).foregroundStyle(.secondary)
+        }
     }
 
     // MARK: - Empty state
@@ -55,20 +121,20 @@ struct CandidateListView: View {
     // MARK: - Connectivity badge
 
     private var connectivityBadge: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 5) {
             Circle()
-                .fill(viewModel.syncManager.isOnline ? Color.green : Color.orange)
-                .frame(width: 8, height: 8)
+                .fill(viewModel.syncManager.isOnline ? Studio.Palette.scoreHigh : Studio.Palette.scoreMid)
+                .frame(width: 7, height: 7)
             Text(viewModel.syncManager.isOnline ? "Online" : "Offline")
-                .font(.caption)
+                .font(.caption).fontWeight(.medium)
                 .foregroundStyle(.secondary)
         }
     }
 }
 
-// MARK: - Candidate row
+// MARK: - Candidate card
 
-private struct CandidateRowView: View {
+private struct CandidateCardView: View {
     let candidate: Candidate
     let status: String
     let isLoading: Bool
@@ -76,53 +142,48 @@ private struct CandidateRowView: View {
 
     private var statusColor: Color {
         switch status {
-        case "Completed": return .green
-        case "In Progress": return .orange
-        default: return .secondary
+        case "Completed":   return Studio.Palette.scoreHigh
+        case "In Progress": return Studio.Palette.scoreMid
+        default:            return Studio.Palette.accent
         }
     }
 
     var body: some View {
-        HStack(spacing: 12) {
-            // Avatar
-            Circle()
-                .fill(Color.accentColor.opacity(0.15))
-                .frame(width: 44, height: 44)
-                .overlay {
-                    Text(candidate.name.prefix(1).uppercased())
-                        .font(.headline)
-                        .foregroundStyle(Color.accentColor)
-                }
+        HStack(spacing: Studio.Spacing.md) {
+            // Gradient avatar adds colour + depth.
+            Text(candidate.name.prefix(1).uppercased())
+                .font(.title3.weight(.bold))
+                .foregroundStyle(.white)
+                .frame(width: 48, height: 48)
+                .background(Studio.accentGradient, in: Circle())
+                .shadow(color: Studio.Palette.accent.opacity(0.25), radius: 6, y: 3)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 5) {
                 Text(candidate.name)
                     .font(.headline)
-
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(statusColor)
-                        .frame(width: 6, height: 6)
-                    Text(status)
-                        .font(.caption)
-                        .foregroundStyle(statusColor)
-                }
+                Text(status)
+                    .font(.caption).fontWeight(.semibold)
+                    .foregroundStyle(statusColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(statusColor.opacity(0.14), in: Capsule())
             }
 
-            Spacer()
+            Spacer(minLength: Studio.Spacing.sm)
 
-            if status != "Completed" {
-                Button(status == "In Progress" ? "Resume" : "Start") {
-                    onStart()
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .disabled(isLoading)
+            if status == "Completed" {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.title2)
+                    .foregroundStyle(Studio.Palette.scoreHigh)
             } else {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                    .font(.title3)
+                Button(status == "In Progress" ? "Resume" : "Start", action: onStart)
+                    .font(.subheadline.weight(.semibold))
+                    .buttonStyle(.borderedProminent)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.regular)
+                    .disabled(isLoading)
             }
         }
-        .padding(.vertical, 4)
+        .studioCard(padding: Studio.Spacing.md)
     }
 }
