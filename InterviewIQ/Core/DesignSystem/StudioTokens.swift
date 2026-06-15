@@ -2,12 +2,13 @@
 //  StudioTokens.swift
 //  InterviewIQ
 //
-//  "Studio" design system — one token spine, two states:
-//    • Workspace (light, bento + ledger) for browsing & comparison
-//    • Stage (dark, aurora glass) for the live scoring focus moment
+//  "Studio" design system — a single, cohesive LIGHT language applied across
+//  every screen and modal: calm grouped canvases, soft white cards, one indigo
+//  accent (with a subtle indigo→violet gradient for primary actions), and a
+//  shared score colour ramp used as both a tint and a fill.
 //
-//  Everything here is iOS 26-native. Colours reuse the existing brand
-//  palette in Color+Brand.swift so this is additive, not a fork.
+//  Colours reuse the existing brand palette in Color+Brand.swift so this is
+//  additive, not a fork. iOS 26-native throughout.
 //
 
 import SwiftUI
@@ -33,21 +34,17 @@ enum Studio {
 
     // MARK: - Palette
     enum Palette {
-        static let accent = Color.brandPurple                       // #4F46E5 (existing brand)
-        static let canvas = Color(.systemGroupedBackground)         // Workspace background
-        static let tile   = Color(.secondarySystemGroupedBackground)// Workspace tiles
+        static let accent    = Color.brandPurple                       // #4F46E5 indigo (existing brand)
+        static let accentAlt = Color(red: 139/255, green: 92/255, blue: 246/255) // #8B5CF6 violet (gradient partner)
 
-        // Score ramp — single channel, reused as a tint (Workspace) and a glow (Stage)
-        static let scoreHigh = Color.successText                    // #10B981 mint (existing)
-        static let scoreMid  = Color(red: 245/255, green: 158/255, blue: 11/255)  // #F59E0B amber
-        static let scoreLow  = Color.systemAlertText                // #EF4444 rose (existing)
+        static let canvas = Color(red: 239/255, green: 240/255, blue: 249/255) // #EFF0F9 branded off-white (not stock grey)
+        static let tile   = Color.white                                        // cards pop on the tinted canvas
+        static let fill   = Color(.tertiarySystemFill)                // inset controls (unselected pills, fields)
 
-        // Stage (dark aurora)
-        static let stageBase    = Color(red: 12/255,  green: 14/255,  blue: 22/255)  // #0C0E16
-        static let stageRaise   = Color(red: 20/255,  green: 24/255,  blue: 38/255)  // #141826
-        static let auroraIndigo = Color(red: 79/255,  green: 70/255,  blue: 229/255) // #4F46E5
-        static let auroraViolet = Color(red: 139/255, green: 92/255,  blue: 246/255) // #8B5CF6
-        static let auroraCyan   = Color(red: 34/255,  green: 211/255, blue: 238/255) // #22D3EE
+        // Score ramp — single channel, reused as a tint (washes) and a fill (spines/rings)
+        static let scoreHigh = Color.successText                       // #10B981 mint (existing)
+        static let scoreMid  = Color(red: 245/255, green: 158/255, blue: 11/255) // #F59E0B amber
+        static let scoreLow  = Color.systemAlertText                   // #EF4444 rose (existing)
     }
 
     // MARK: - Score → colour
@@ -61,7 +58,7 @@ enum Studio {
         }
     }
 
-    // MARK: - Monochromatic contextual wash (Workspace tinting)
+    // MARK: - Monochromatic contextual wash (score tinting)
     // A faint wash of the score colour over a surface — never a saturated fill.
     static func scoreTint(for score: Int,
                           over surface: Color = Palette.tile,
@@ -69,12 +66,21 @@ enum Studio {
         surface.mix(with: scoreColor(for: score), by: amount)
     }
 
-    // MARK: - Aurora gradient (Stage accents)
-    static var auroraGradient: LinearGradient {
+    // MARK: - Accent gradient (primary actions, progress) — premium without going dark
+    static var accentGradient: LinearGradient {
         LinearGradient(
-            colors: [Palette.auroraIndigo, Palette.auroraViolet, Palette.auroraCyan],
+            colors: [Palette.accent, Palette.accentAlt],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
+    }
+}
+
+// MARK: - Signature typography
+extension Font {
+    /// Rounded display face — InterviewIQ's signature heading type, distinct
+    /// from the stock SF used by system apps like Settings.
+    static func studioDisplay(_ size: CGFloat, weight: Font.Weight = .bold) -> Font {
+        .system(size: size, weight: weight, design: .rounded)
     }
 }

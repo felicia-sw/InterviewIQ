@@ -2,14 +2,14 @@
 //  StudioComponents.swift
 //  InterviewIQ
 //
-//  Reusable building blocks for the Studio design system: the Workspace card
-//  style, the dark Stage backdrop + modifier, score visualisations, and the
-//  Stage button styles. Screens compose these so the system spreads for free.
+//  Reusable building blocks for the Studio design system so the same language
+//  flows across every screen and modal: the card style, score visualisations,
+//  and the primary/secondary button styles. All light, all iOS 26-native.
 //
 
 import SwiftUI
 
-// MARK: - Workspace card
+// MARK: - Card
 
 struct StudioCard: ViewModifier {
     var radius: CGFloat = Studio.Radius.card
@@ -20,9 +20,9 @@ struct StudioCard: ViewModifier {
         content
             .padding(padding)
             .background(fill, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
-            // Layered soft float — the Stratus signature.
-            .shadow(color: .black.opacity(0.04), radius: 1, y: 1)
-            .shadow(color: .black.opacity(0.06), radius: 16, y: 8)
+            // Layered soft float with a faint accent-tinted ambient shadow — the Studio signature.
+            .shadow(color: .black.opacity(0.05), radius: 1, y: 1)
+            .shadow(color: Studio.Palette.accent.opacity(0.10), radius: 18, y: 10)
     }
 }
 
@@ -34,36 +34,7 @@ extension View {
     }
 }
 
-// MARK: - Stage backdrop
-
-// Layered radial "aurora" over a near-black base. Deliberately uses radial
-// gradients (not MeshGradient) so it is rock-solid across configurations.
-struct AuroraBackground: View {
-    var body: some View {
-        ZStack {
-            Studio.Palette.stageBase
-            RadialGradient(colors: [Studio.Palette.auroraIndigo.opacity(0.45), .clear],
-                           center: .topLeading, startRadius: 0, endRadius: 480)
-            RadialGradient(colors: [Studio.Palette.auroraViolet.opacity(0.40), .clear],
-                           center: .bottomTrailing, startRadius: 0, endRadius: 520)
-            RadialGradient(colors: [Studio.Palette.auroraCyan.opacity(0.20), .clear],
-                           center: .center, startRadius: 0, endRadius: 360)
-        }
-        .ignoresSafeArea()
-    }
-}
-
-extension View {
-    /// Dims a screen into the dark "Stage" — the live scoring focus mode.
-    func studioStage() -> some View {
-        self
-            .background(AuroraBackground())
-            .preferredColorScheme(.dark)
-            .tint(Studio.Palette.auroraViolet)
-    }
-}
-
-// MARK: - Score ring (Workspace gauges)
+// MARK: - Score ring (gauges)
 
 struct ScoreRing: View {
     let score: Int               // 0...100
@@ -118,10 +89,12 @@ struct Sparkline: View {
     }
 }
 
-// MARK: - Stage button styles
+// MARK: - Button styles
 
-struct StagePrimaryButtonStyle: ButtonStyle {
-    /// `nil` tint = aurora gradient fill.
+// Primary call-to-action: accent gradient fill, white label. Use for the main
+// action on any screen or modal (Submit, Get Started, Save, Continue…).
+struct StudioPrimaryButtonStyle: ButtonStyle {
+    /// Override the gradient with a solid tint (e.g. green for a completed Submit).
     var tint: Color? = nil
 
     func makeBody(configuration: Configuration) -> some View {
@@ -144,11 +117,11 @@ struct StagePrimaryButtonStyle: ButtonStyle {
                     if let tint {
                         shape.fill(tint)
                     } else {
-                        shape.fill(Studio.auroraGradient)
+                        shape.fill(Studio.accentGradient)
                     }
                 }
-                .shadow(color: (tint ?? Studio.Palette.auroraViolet).opacity(isEnabled ? 0.5 : 0),
-                        radius: configuration.isPressed ? 4 : 14, y: 4)
+                .shadow(color: (tint ?? Studio.Palette.accent).opacity(isEnabled ? 0.30 : 0),
+                        radius: configuration.isPressed ? 3 : 10, y: 4)
                 .opacity(isEnabled ? (configuration.isPressed ? 0.9 : 1) : 0.4)
                 .scaleEffect(configuration.isPressed ? 0.97 : 1)
                 .animation(.snappy(duration: 0.18), value: configuration.isPressed)
@@ -156,7 +129,8 @@ struct StagePrimaryButtonStyle: ButtonStyle {
     }
 }
 
-struct StageSecondaryButtonStyle: ButtonStyle {
+// Secondary action: soft tinted accent surface (Previous, Cancel, Skip…).
+struct StudioSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         StyledLabel(configuration: configuration)
     }
@@ -168,16 +142,39 @@ struct StageSecondaryButtonStyle: ButtonStyle {
         var body: some View {
             configuration.label
                 .font(.headline)
-                .foregroundStyle(.white.opacity(0.9))
+                .foregroundStyle(Studio.Palette.accent)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .background(.ultraThinMaterial,
+                .background(Studio.Palette.accent.opacity(0.12),
                             in: RoundedRectangle(cornerRadius: Studio.Radius.chip, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: Studio.Radius.chip, style: .continuous)
-                        .strokeBorder(.white.opacity(0.12))
-                )
                 .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.35)
         }
+    }
+}
+
+// MARK: - Branded header
+
+// Replaces the stock large-title-on-grouped-list look with a signature header:
+// a rounded display title plus a short accent-gradient underline motif that
+// recurs across every screen.
+struct StudioHeader: View {
+    let title: String
+    var subtitle: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Studio.Spacing.xs) {
+            Text(title)
+                .font(.studioDisplay(34))
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(Studio.accentGradient)
+                .frame(width: 44, height: 4)
+            if let subtitle {
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

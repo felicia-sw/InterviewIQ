@@ -32,6 +32,10 @@ struct InterviewIQApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                // One brand accent across every screen, modal, and system control.
+                .tint(Studio.Palette.accent)
+                // Locked to light — InterviewIQ has a single, branded light identity.
+                .preferredColorScheme(.light)
         }
     }
 }
