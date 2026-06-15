@@ -6,6 +6,7 @@ enum AuditAction: String, Codable {
     case userRegistered
     case loginSucceeded
     case loginFailed
+    case passwordResetRequested
     case sessionCreated
     case sessionUpdated
     case sessionDeleted

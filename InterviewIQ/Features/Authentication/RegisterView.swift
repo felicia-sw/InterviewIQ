@@ -66,13 +66,14 @@ struct RegisterView: View {
                             .font(.system(size: 32))
                             .foregroundColor(.white)
                             .padding(18)
-                            .background(Color.brandPurple)
-                            .cornerRadius(18)
-                        
+                            .background(Studio.accentGradient,
+                                        in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                            .shadow(color: Studio.Palette.accent.opacity(0.3), radius: 10, y: 5)
+
                         Text("InterviewIQ")
-                            .font(.system(size: 28, weight: .bold))
+                            .font(.studioDisplay(28))
                             .foregroundColor(.primary)
-                        
+
                         Text("Register to continue")
                             .font(.system(size: 14))
                             .foregroundColor(.secondary)
@@ -159,19 +160,12 @@ struct RegisterView: View {
                     }
                     
                     // 7. Execution Pipeline Core Control Button
-                    Button(action: {
-                        Task {
-                            await viewModel.performRegistration()
-                        }
-                    }) {
+                    Button {
+                        Task { await viewModel.performRegistration() }
+                    } label: {
                         Text(viewModel.isLoading ? "Registering..." : "Register")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(viewModel.hasSuccessfullyRegistered ? Color.successText : Color.brandPurple)
-                            .cornerRadius(14)
                     }
+                    .buttonStyle(StudioPrimaryButtonStyle(tint: viewModel.hasSuccessfullyRegistered ? Studio.Palette.scoreHigh : nil))
                     .disabled(viewModel.isLoading || viewModel.hasSuccessfullyRegistered)
                     .padding(.top, 10)
                     
@@ -207,6 +201,6 @@ struct RegisterView: View {
             }
         }
         .navigationBarHidden(true)
-        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .background(Studio.Palette.canvas.ignoresSafeArea())
     }
 }

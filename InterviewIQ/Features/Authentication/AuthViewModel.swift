@@ -16,6 +16,10 @@ class AuthViewModel: ObservableObject {
     @Published var isAccountLocked = false
     @Published var hasSuccessfullyRegistered = false
 
+    // Password reset
+    @Published var showPasswordResetConfirmation = false
+    @Published var passwordResetMessage = ""
+
     // MARK: - Core Security Storage (Per-Account Lock Tracking)
     private var accountFailedAttempts: [String: Int] = [:]
     private var accountLockExpirations: [String: Date] = [:]
@@ -202,6 +206,56 @@ class AuthViewModel: ObservableObject {
                     self.errorMessage = error.localizedDescription
                 }
             }
+        }
+    }
+
+    /// Sends a Firebase password-reset email to the address in the email field.
+    /// Shows a neutral confirmation regardless of whether the account exists, to
+    /// avoid leaking which emails are registered (user-enumeration protection).
+    func sendPasswordReset() async {
+        let normalizedEmail = emailAddress.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        guard !normalizedEmail.isEmpty else {
+            await MainActor.run {
+                self.hasAuthenticationError = true
+                self.errorMessage = "Enter your email address above first, then tap Forgot?."
+            }
+            return
+        }
+
+        await MainActor.run {
+            self.isLoading = true
+            self.hasAuthenticationError = false
+            self.errorMessage = ""
+        }
+
+        do {
+            try await Auth.auth().sendPasswordReset(withEmail: normalizedEmail)
+        } catch {
+            // Surface a malformed address; everything else (including userNotFound)
+            // falls through to the same neutral confirmation below.
+            if (error as NSError).code == AuthErrorCode.invalidEmail.rawValue {
+                await MainActor.run {
+                    self.isLoading = false
+                    self.hasAuthenticationError = true
+                    self.errorMessage = "That doesn't look like a valid email address."
+                }
+                return
+            }
+        }
+
+        await auditLogger.log(
+            .passwordResetRequested,
+            actorId: normalizedEmail,
+            targetType: "user",
+            targetId: normalizedEmail,
+            details: normalizedEmail
+        )
+
+        await MainActor.run {
+            self.isLoading = false
+            self.passwordResetMessage = "If an account exists for \(normalizedEmail), a password reset link is on its way. Check your inbox and spam folder."
+            self.showPasswordResetConfirmation = true
         }
     }
 }

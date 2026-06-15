@@ -59,11 +59,12 @@ struct LoginView: View {
                             .font(.system(size: 32))
                             .foregroundColor(.white)
                             .padding(18)
-                            .background(Color.brandPurple)
-                            .cornerRadius(18)
-                        
+                            .background(Studio.accentGradient,
+                                        in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                            .shadow(color: Studio.Palette.accent.opacity(0.3), radius: 10, y: 5)
+
                         Text("InterviewIQ")
-                            .font(.system(size: 28, weight: .bold))
+                            .font(.studioDisplay(28))
                             .foregroundColor(.primary)
                         
                         Text("Sign in to continue")
@@ -105,12 +106,13 @@ struct LoginView: View {
                             Spacer()
                             
                             Button(action: {
-                                // Anchor placeholder for future forgot credential flows
+                                Task { await viewModel.sendPasswordReset() }
                             }) {
                                 Text("Forgot?")
                                     .font(.system(size: 13, weight: .medium))
                                     .foregroundColor(.brandPurple)
                             }
+                            .disabled(viewModel.isLoading)
                         }
                         
                         HStack(spacing: 12) {
@@ -159,19 +161,12 @@ struct LoginView: View {
                     }
                     
                     // 7. Interactive Processing Button
-                    Button(action: {
-                        Task {
-                            await viewModel.performLogin()
-                        }
-                    }) {
+                    Button {
+                        Task { await viewModel.performLogin() }
+                    } label: {
                         Text(viewModel.isLoading ? "Signing In..." : "Login")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(viewModel.isAccountLocked ? Color.brandGrey : Color.brandPurple)
-                            .cornerRadius(14)
                     }
+                    .buttonStyle(StudioPrimaryButtonStyle(tint: viewModel.isAccountLocked ? Color.brandGrey : nil))
                     .disabled(viewModel.isLoading || viewModel.isAccountLocked)
                     .padding(.top, 10)
                     
@@ -203,6 +198,11 @@ struct LoginView: View {
             }
         }
         .navigationBarHidden(true)
-        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .background(Studio.Palette.canvas.ignoresSafeArea())
+        .alert("Check your email", isPresented: $viewModel.showPasswordResetConfirmation) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(viewModel.passwordResetMessage)
+        }
     }
 }
