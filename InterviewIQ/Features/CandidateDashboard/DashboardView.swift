@@ -32,8 +32,8 @@ struct DashboardComparisonView: View {
                 dashboardContent
             }
         }
-        .navigationTitle("Dashboard")
-        .navigationBarTitleDisplayMode(.large)
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
@@ -88,6 +88,7 @@ struct DashboardComparisonView: View {
     private var dashboardContent: some View {
         ScrollView {
             VStack(spacing: Studio.Spacing.lg) {
+                StudioHeader(title: "Dashboard", subtitle: sessionTitle)
                 bentoHeader
                 ledger
             }
@@ -219,6 +220,26 @@ private struct LedgerRow: View {
     private var scoreColor: Color { Studio.scoreColor(for: candidate.totalScore) }
     private var sparkValues: [Int] { candidate.questionScores.map(\.score) }
 
+    @ViewBuilder private var panelMeta: some View {
+        if candidate.panelistCount > 1 {
+            HStack(spacing: Studio.Spacing.xs) {
+                HStack(spacing: 3) {
+                    Image(systemName: "person.2.fill").font(.system(size: 9))
+                    Text("\(candidate.panelistCount) panelists").font(.caption2)
+                }
+                .foregroundStyle(.secondary)
+
+                if candidate.hasDisagreement {
+                    Text("Split ±\(candidate.scoreSpread)")
+                        .font(.caption2).fontWeight(.semibold)
+                        .foregroundStyle(Studio.Palette.scoreMid)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Studio.Palette.scoreMid.opacity(0.15), in: Capsule())
+                }
+            }
+        }
+    }
+
     var body: some View {
         HStack(spacing: Studio.Spacing.md) {
             // Rank numeral — bold + tinted for the podium, light + muted otherwise.
@@ -231,6 +252,8 @@ private struct LedgerRow: View {
             VStack(alignment: .leading, spacing: Studio.Spacing.xxs) {
                 Text(candidate.name)
                     .font(.headline)
+
+                panelMeta
 
                 if sparkValues.count >= 2 {
                     Sparkline(values: sparkValues, color: scoreColor.opacity(0.7))
@@ -280,17 +303,17 @@ private struct LedgerPreviewHost: View {
                         submittedAt: Date(), interviewerId: "x",
                         questionScores: [.init(questionId: "a", score: 5), .init(questionId: "b", score: 4),
                                          .init(questionId: "c", score: 5), .init(questionId: "d", score: 4)],
-                        notes: ""),
+                        notes: "", panelistCount: 3, scoreSpread: 6),
         RankedCandidate(id: "2", name: "Jordan Reyes", totalScore: 72, rank: 2,
                         submittedAt: Date(), interviewerId: "x",
                         questionScores: [.init(questionId: "a", score: 3), .init(questionId: "b", score: 4),
                                          .init(questionId: "c", score: 2), .init(questionId: "d", score: 5)],
-                        notes: ""),
+                        notes: "", panelistCount: 3, scoreSpread: 22),
         RankedCandidate(id: "3", name: "Sam Okafor", totalScore: 54, rank: 3,
                         submittedAt: Date(), interviewerId: "x",
                         questionScores: [.init(questionId: "a", score: 2), .init(questionId: "b", score: 3),
                                          .init(questionId: "c", score: 2)],
-                        notes: "")
+                        notes: "", panelistCount: 2, scoreSpread: 10)
     ]
 
     var body: some View {

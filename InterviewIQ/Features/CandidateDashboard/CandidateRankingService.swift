@@ -13,12 +13,17 @@ import FirebaseDatabase
 struct RankedCandidate: Identifiable {
     let id: String          // candidateId
     let name: String
-    let totalScore: Int     // 0–100 weighted percentage
+    let totalScore: Int     // 0–100 weighted percentage, AVERAGED across panelists
     let rank: Int
-    let submittedAt: Date?
-    let interviewerId: String
-    let questionScores: [QuestionScore]
-    let notes: String
+    let submittedAt: Date?   // most recent panelist submission
+    let interviewerId: String // retained for compatibility; "" for multi-panelist aggregates
+    let questionScores: [QuestionScore] // per-question MEAN across panelists (drives the sparkline)
+    let notes: String        // combined panelist notes
+    let panelistCount: Int   // how many panelists scored this candidate
+    let scoreSpread: Int     // max − min of panelist totals (0 for a single panelist)
+
+    // Flags candidates the panel disagrees on (≥15 percentage-point spread).
+    var hasDisagreement: Bool { panelistCount > 1 && scoreSpread >= 15 }
 }
 
 // MARK: - Service
@@ -44,27 +49,44 @@ final class CandidateRankingService {
         // 3. Fetch all submitted score records
         let scoreRecords = try await fetchSubmittedScoreRecords(sessionId: sessionId)
 
-        // 4. Compute weighted total for each record and build RankedCandidate list
-        var ranked: [RankedCandidate] = scoreRecords.compactMap { record in
-            guard let name = candidateMap[record.candidateId] else { return nil }
+        // 4. Aggregate every panelist's submitted record per candidate (true panel:
+        //    multiple interviewers can score the same candidate). One ranked entry
+        //    per candidate — averaged score, plus a disagreement spread.
+        let recordsByCandidate = Dictionary(grouping: scoreRecords, by: { $0.candidateId })
 
-            // Re-compute from question scores using the same formula as InterviewConductorService
-            let total = calculateWeightedScore(questions: questions, questionScores: record.questionScores)
+        let aggregated: [RankedCandidate] = recordsByCandidate.compactMap { candidateId, records in
+            guard let name = candidateMap[candidateId] else { return nil }
+
+            // Each panelist's weighted total, using the same formula as InterviewConductorService.
+            let totals = records.map {
+                calculateWeightedScore(questions: questions, questionScores: $0.questionScores)
+            }
+            guard !totals.isEmpty else { return nil }
+
+            let average = totals.reduce(0, +) / totals.count
+            let spread = (totals.max() ?? 0) - (totals.min() ?? 0)
+            let latestSubmittedAt = records.compactMap { $0.submittedAt }.max()
+            let combinedNotes = records
+                .map { $0.notes }
+                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .joined(separator: "\n")
 
             return RankedCandidate(
-                id: record.candidateId,
+                id: candidateId,
                 name: name,
-                totalScore: total,
+                totalScore: average,
                 rank: 0, // assigned below after sorting
-                submittedAt: record.submittedAt,
-                interviewerId: record.interviewerId,
-                questionScores: record.questionScores,
-                notes: record.notes
+                submittedAt: latestSubmittedAt,
+                interviewerId: records.count == 1 ? records[0].interviewerId : "",
+                questionScores: meanQuestionScores(questions: questions, records: records),
+                notes: combinedNotes,
+                panelistCount: records.count,
+                scoreSpread: spread
             )
         }
 
         // 5. Sort and assign rank numbers
-        return sortCandidates(ranked)
+        return sortCandidates(aggregated)
     }
 
     // Sorts candidates highest-score first (tie-break: earlier submittedAt wins)
@@ -86,8 +108,25 @@ final class CandidateRankingService {
                 submittedAt: candidate.submittedAt,
                 interviewerId: candidate.interviewerId,
                 questionScores: candidate.questionScores,
-                notes: candidate.notes
+                notes: candidate.notes,
+                panelistCount: candidate.panelistCount,
+                scoreSpread: candidate.scoreSpread
             )
+        }
+    }
+
+    // Per-question mean score across all panelists, in rubric order. Drives the
+    // dashboard sparkline so it reflects the panel's consensus, not one rater.
+    private func meanQuestionScores(questions: [RubricQuestion], records: [ScoreRecord]) -> [QuestionScore] {
+        questions.compactMap { q in
+            let scores = records.compactMap { record -> Int? in
+                guard let qs = record.questionScores.first(where: { $0.questionId == q.id }),
+                      qs.isAnswered else { return nil }
+                return qs.score
+            }
+            guard !scores.isEmpty else { return nil }
+            let mean = scores.reduce(0, +) / scores.count
+            return QuestionScore(questionId: q.id, score: mean, notes: "")
         }
     }
 
