@@ -1,0 +1,109 @@
+{
+  // InterviewIQ — Firebase Realtime Database security rules.
+  //
+  // Deploy: paste into Firebase Console → Realtime Database → Rules, OR run
+  //   firebase deploy --only database
+  // (after adding "database": { "rules": "database.rules.json" } to firebase.json).
+  //
+  // Model these rules enforce:
+  //   • Profiles are self-owned; role/isActive can't be flipped after creation.
+  //   • Only a session's owner (adminId) can create/edit/delete that session,
+  //     its candidates and its rubric.
+  //   • Any signed-in user can READ /sessions (the app fetches the whole node and
+  //     filters client-side). Tightening reads requires refactoring the client to
+  //     query orderByChild('adminId') / a panelist map (see notes below).
+  //   • An interviewer can submit their OWN score record once; after submission
+  //     (isImmutable) they can no longer edit it.
+  //   • Audit logs are append-only.
+  //   • Everything else is denied by default.
+
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    // ---- Users -------------------------------------------------------------
+    "users": {
+      // Readable by any signed-in user (needed to resolve names + assign
+      // panelists by email). Tighten later if profiles become sensitive.
+      ".read": "auth != null",
+
+      "$uid": {
+        // You may only write your OWN profile node.
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.hasChildren(['userId', 'fullName', 'emailAddress'])",
+
+        "userId":       { ".validate": "newData.val() === $uid" },
+        "fullName":     { ".validate": "newData.isString() && newData.val().length > 0" },
+        "emailAddress": { ".validate": "newData.isString() && newData.val().length > 0" },
+
+        // Role + active flag can be SET at registration but never CHANGED by the
+        // user afterwards (prevents an interviewer self-promoting to admin or a
+        // deactivated user reactivating). NOTE: a brand-new registrant can still
+        // choose 'admin' at creation — move role assignment to a Cloud Function
+        // or custom claims for true server-side control.
+        "role": {
+          ".validate": "(newData.val() === 'admin' || newData.val() === 'interviewer') && (!data.exists() || newData.val() === data.val())"
+        },
+        "isActive": {
+          ".validate": "newData.isBoolean() && (!data.exists() || newData.val() === data.val())"
+        },
+
+        "$other": { ".validate": true }
+      }
+    },
+
+    // ---- Sessions ----------------------------------------------------------
+    "sessions": {
+      // Whole-node read by any signed-in user (matches the current client which
+      // reads /sessions and filters by adminId / interviewerIds in Swift).
+      ".read": "auth != null",
+
+      "$sid": {
+        // Create only as the owner (adminId === you); edit/delete only by the
+        // owner. This cascades write access to candidates / rubricQuestions /
+        // interviewerIds beneath — which is what we want for session admins.
+        ".write": "auth != null && ( !data.exists() ? newData.child('adminId').val() === auth.uid : data.child('adminId').val() === auth.uid )",
+        ".validate": "newData.hasChildren(['id', 'title', 'adminId'])",
+
+        "adminId": {
+          // adminId is fixed to its creator and can't be reassigned.
+          ".validate": "newData.val() === auth.uid || newData.val() === data.val()"
+        },
+
+        // Candidate locks: any signed-in participant may claim/release a lock.
+        "candidateLocks": {
+          ".write": "auth != null"
+        },
+
+        // Score records: an interviewer creates their OWN record; once it's
+        // immutable (submitted) the interviewer can no longer change it. This
+        // child rule GRANTS panelists write access even though they don't own
+        // the session.
+        //
+        // KNOWN LIMITATION: the owner's session-level write (above) cascades
+        // here, so a session owner could still overwrite/delete a submitted
+        // record. To make submissions tamper-proof even against the owner, move
+        // scoreRecords out from under sessions/$sid or gate them behind a Cloud
+        // Function.
+        "scoreRecords": {
+          "$recordId": {
+            ".write": "auth != null && ( !data.exists() ? newData.child('interviewerId').val() === auth.uid : (data.child('interviewerId').val() === auth.uid && data.child('isImmutable').val() !== true) )",
+            ".validate": "newData.hasChildren(['candidateId', 'interviewerId', 'sessionId', 'status'])",
+            "interviewerId": { ".validate": "newData.val() === auth.uid || newData.val() === data.val()" }
+          }
+        }
+      }
+    },
+
+    // ---- Audit logs --------------------------------------------------------
+    // Append-only: a signed-in user may add an entry, but none may edit or
+    // delete one. (Consider restricting reads to admins via custom claims.)
+    "auditLogs": {
+      ".read": "auth != null",
+      "$logId": {
+        ".write": "auth != null && !data.exists() && newData.exists()",
+        ".validate": "newData.hasChildren(['actorId', 'action', 'timestamp'])"
+      }
+    }
+  }
+}
