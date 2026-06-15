@@ -19,7 +19,7 @@ struct CandidateListView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                connectivityBadge
+                syncStatusBadge
             }
         }
         .refreshable {
@@ -118,17 +118,51 @@ struct CandidateListView: View {
         )
     }
 
-    // MARK: - Connectivity badge
+    // MARK: - Sync status badge
+    //
+    // Surfaces OfflineSyncManager's state: online/offline, how many scores are
+    // queued, an in-flight spinner, and a failure tint. Tapping retries the sync
+    // (enabled only when there's something to send and we're online).
 
-    private var connectivityBadge: some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(viewModel.syncManager.isOnline ? Studio.Palette.scoreHigh : Studio.Palette.scoreMid)
-                .frame(width: 7, height: 7)
-            Text(viewModel.syncManager.isOnline ? "Online" : "Offline")
-                .font(.caption).fontWeight(.medium)
-                .foregroundStyle(.secondary)
+    private var sync: OfflineSyncManager { viewModel.syncManager }
+
+    private var syncStatusBadge: some View {
+        let pending = sync.pendingCount
+        let canRetry = pending > 0 && sync.isOnline && !sync.isSyncing
+
+        let tint: Color = sync.lastSyncFailed ? Studio.Palette.scoreLow
+            : pending > 0 ? Studio.Palette.scoreMid
+            : sync.isOnline ? Studio.Palette.scoreHigh : .secondary
+
+        return Button {
+            sync.retryNow()
+        } label: {
+            HStack(spacing: 5) {
+                if sync.isSyncing {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Circle().fill(tint).frame(width: 7, height: 7)
+                }
+                Text(statusLabel(pending: pending))
+                    .font(.caption).fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(tint.opacity(0.12), in: Capsule())
         }
+        .buttonStyle(.plain)
+        .disabled(!canRetry)
+        .animation(.smooth, value: pending)
+        .accessibilityLabel(pending > 0 ? "\(pending) scores pending sync. Tap to retry." : (sync.isOnline ? "All scores synced" : "Offline"))
+    }
+
+    private func statusLabel(pending: Int) -> String {
+        if sync.isSyncing { return "Syncing…" }
+        if sync.lastSyncFailed && pending > 0 { return "\(pending) failed — retry" }
+        if pending > 0 { return "\(pending) pending" }
+        return sync.isOnline ? "Synced" : "Offline"
     }
 }
 
