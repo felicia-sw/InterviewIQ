@@ -34,6 +34,13 @@ final class DashboardComparisonVM {
     private let rankingService = CandidateRankingService()
     private let exportService = ReportExportService()
 
+    // The project defaults every type to `@MainActor` (Approachable Concurrency),
+    // which gives this `@Observable` view model a MainActor-isolated deinit. That
+    // tears down via the concurrency runtime and double-frees under guard-malloc,
+    // crashing on dealloc. A `nonisolated deinit` runs teardown synchronously and
+    // sidesteps it; there's no isolated state to clean up here anyway.
+    nonisolated deinit {}
+
     // MARK: - Data Loading
 
     func loadDashboard() async {

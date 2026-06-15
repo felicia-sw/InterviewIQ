@@ -3,7 +3,7 @@ import FirebaseDatabase
 
 // Handles local persistence (UserDefaults) and remote Realtime Database writes for ScoreRecords.
 // Offline-first: scores are always saved locally before any network operation (NFR-07).
-final class ScoreRepository {
+nonisolated final class ScoreRepository {
     private let db = Database.database().reference()
     private let localKey = "pending_score_records"
 

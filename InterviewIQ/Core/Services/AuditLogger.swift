@@ -4,7 +4,7 @@ import Foundation
 // action it records, so failures are swallowed (and printed in debug). Call
 // sites stay terse: one `log(...)` instead of building a record + handling
 // write errors everywhere.
-final class AuditLogger {
+nonisolated final class AuditLogger {
     private let repo: AuditLogRepository
 
     init(repo: AuditLogRepository = AuditLogRepository()) {

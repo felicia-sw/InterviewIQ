@@ -31,7 +31,15 @@ struct RankedCandidate: Identifiable {
 // CandidateRankingService (C-03): fetches score records and rubric for a session,
 // computes weighted totals, and returns candidates sorted highest -> lowest.
 // Tie-breaker: earlier submittedAt wins (lower rank number = better).
-final class CandidateRankingService {
+// `nonisolated` opts this data-layer service out of the project-wide
+// `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` default. It does pure data
+// access (no UI state), so it doesn't belong on the main actor — and, more
+// importantly, a MainActor-isolated deinit tears down via the Swift
+// concurrency runtime (`swift_task_deinitOnExecutorImpl`), which double-frees
+// under guard-malloc and crashes the dashboard's deinit. A nonisolated class
+// gets a plain synchronous deinit, and its network fetch runs off the main
+// thread.
+nonisolated final class CandidateRankingService {
     private let db = Database.database().reference()
 
     // Returns a ranked list of candidates for a given session.

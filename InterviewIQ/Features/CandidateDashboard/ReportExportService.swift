@@ -11,7 +11,9 @@ import UIKit
 // ReportExportService: generates CSV and PDF report files locally on the device.
 // Files are written to the app's temp directory and returned as URLs
 // for UIActivityViewController sharing (UC-06).
-final class ReportExportService {
+// nonisolated: pure report generation, off the main actor. See
+// CandidateRankingService for why MainActor-isolated deinits crash under test.
+nonisolated final class ReportExportService {
 
     // MARK: - CSV
 

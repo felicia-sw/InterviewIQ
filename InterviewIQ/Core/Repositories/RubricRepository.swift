@@ -5,7 +5,7 @@ import FirebaseDatabase
 // Matches RubricRepository (C-20) in the class diagram. Field names mirror the
 // reader in InterviewConductorService.fetchRubricQuestions so the live rating
 // flow (UC-04) sees exactly what the editor (UC-03) writes.
-final class RubricRepository {
+nonisolated final class RubricRepository {
     private let db = Database.database().reference()
 
     func fetchQuestions(sessionId: String) async throws -> [RubricQuestion] {

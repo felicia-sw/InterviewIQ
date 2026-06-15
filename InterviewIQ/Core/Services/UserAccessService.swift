@@ -19,7 +19,7 @@ enum UserAccessError: LocalizedError {
 // UserAccessService: guards per-session panelist assignment (AGENTS.md Section 2).
 // verifyAdminRights checks session ownership (not a system-wide role).
 // attachPanelist / removePanelist mutate the session's interviewerIds list.
-final class UserAccessService {
+nonisolated final class UserAccessService {
     private let sessionRepo: SessionRepository
     private let userRepo: UserRepository
 

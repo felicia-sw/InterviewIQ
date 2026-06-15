@@ -4,7 +4,7 @@ import FirebaseDatabase
 // Reads candidate records for a given session from Realtime Database.
 // Session Management is responsible for writing candidates to
 // sessions/{sessionId}/candidates/{candidateId} when creating a session.
-final class CandidateRepository {
+nonisolated final class CandidateRepository {
     private let db = Database.database().reference()
 
     func fetchCandidates(sessionId: String) async throws -> [Candidate] {

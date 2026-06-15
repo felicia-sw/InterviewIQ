@@ -3,7 +3,7 @@ import FirebaseDatabase
 
 // Business logic for UC-04: candidate locking, score validation,
 // total-score calculation, and rubric/candidate fetching.
-final class InterviewConductorService {
+nonisolated final class InterviewConductorService {
     private let db = Database.database().reference()
     private let lockDuration: TimeInterval = 2 * 60 * 60  // 2 hours
 

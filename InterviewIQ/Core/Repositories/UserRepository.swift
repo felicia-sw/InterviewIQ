@@ -4,7 +4,7 @@ import FirebaseDatabase
 // Single source of truth for user profile read/write at users/{uid}.
 // Matches UserRepository (C-33) in the class diagram. Used by the auth flow
 // to persist a profile on registration and to read the role for RBAC routing.
-final class UserRepository {
+nonisolated final class UserRepository {
     private let db = Database.database().reference()
 
     // Writes the full profile (name, email, role, isActive) under users/{uid}.

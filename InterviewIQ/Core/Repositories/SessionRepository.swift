@@ -1,7 +1,7 @@
 import Foundation
 import FirebaseDatabase
 
-final class SessionRepository {
+nonisolated final class SessionRepository {
     private let db = Database.database().reference()
 
     func fetchSessions(adminId: String) async throws -> [Session] {

@@ -22,7 +22,7 @@ enum SessionValidationError: LocalizedError {
     }
 }
 
-final class SessionManagementService {
+nonisolated final class SessionManagementService {
     private let repo: SessionRepository
     private let rubricRepo: RubricRepository
     private let scoreRepo: ScoreRepository

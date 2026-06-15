@@ -5,7 +5,7 @@ import FirebaseDatabase
 // Exposes no update or delete — records are written once and never mutated from
 // the app. True tamper-proofing additionally requires Firebase Security Rules
 // that forbid client updates/deletes on this node (server-side enforcement).
-final class AuditLogRepository {
+nonisolated final class AuditLogRepository {
     private let db = Database.database().reference()
 
     func record(_ log: AuditLog) async throws {
