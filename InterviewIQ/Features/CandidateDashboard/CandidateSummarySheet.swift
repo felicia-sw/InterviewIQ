@@ -18,6 +18,11 @@ struct CandidateSummarySheet: View {
     private var notes: String {
         candidate.notes.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+    private var transcript: String {
+        candidate.transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    // Summarize the verbatim transcript when available, otherwise the typed notes.
+    private var summarizableText: String { transcript.isEmpty ? notes : transcript }
 
     var body: some View {
         NavigationStack {
@@ -25,6 +30,7 @@ struct CandidateSummarySheet: View {
                 VStack(alignment: .leading, spacing: Studio.Spacing.lg) {
                     header
                     aiSummaryCard
+                    transcriptCard
                     notesCard
                 }
                 .padding(Studio.Spacing.md)
@@ -86,17 +92,17 @@ struct CandidateSummarySheet: View {
                         .font(.body)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
-                    Text(notes.isEmpty
-                         ? "No notes to summarize yet."
-                         : "Generate a concise, on-device summary of the panel's notes. Nothing leaves this device.")
+                    Text(summarizableText.isEmpty
+                         ? "No transcript or notes to summarize yet."
+                         : "Generate a concise, on-device summary of this interview. Nothing leaves this device.")
                         .font(.subheadline).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
-            if summary == nil && !notes.isEmpty && summarizer.state != .working {
+            if summary == nil && !summarizableText.isEmpty && summarizer.state != .working {
                 Button {
-                    Task { summary = await summarizer.summarize(notes: candidate.notes) }
+                    Task { summary = await summarizer.summarize(notes: summarizableText) }
                 } label: {
                     Label("Summarize with on-device AI", systemImage: "sparkles")
                         .frame(maxWidth: .infinity)
@@ -109,7 +115,27 @@ struct CandidateSummarySheet: View {
         .studioCard(padding: Studio.Spacing.lg)
     }
 
-    // MARK: - Raw notes (transcript)
+    // MARK: - Transcript (auto speech-to-text)
+
+    private var transcriptCard: some View {
+        VStack(alignment: .leading, spacing: Studio.Spacing.sm) {
+            Label("Transcript", systemImage: "waveform")
+                .font(.subheadline).fontWeight(.semibold)
+            if transcript.isEmpty {
+                Text("No transcript was dictated for this candidate.")
+                    .font(.subheadline).foregroundStyle(.secondary)
+            } else {
+                Text(transcript)
+                    .font(.callout)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .studioCard(padding: Studio.Spacing.lg)
+    }
+
+    // MARK: - Typed notes
 
     private var notesCard: some View {
         VStack(alignment: .leading, spacing: Studio.Spacing.sm) {

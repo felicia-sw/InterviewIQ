@@ -18,7 +18,8 @@ struct RankedCandidate: Identifiable {
     let submittedAt: Date?   // most recent panelist submission
     let interviewerId: String // retained for compatibility; "" for multi-panelist aggregates
     let questionScores: [QuestionScore] // per-question MEAN across panelists (drives the sparkline)
-    let notes: String        // combined panelist notes
+    let notes: String        // combined panelist typed notes
+    let transcript: String   // combined panelist auto-transcripts (kept separate from notes)
     let panelistCount: Int   // how many panelists scored this candidate
     let scoreSpread: Int     // max − min of panelist totals (0 for a single panelist)
 
@@ -74,8 +75,17 @@ nonisolated final class CandidateRankingService {
             let average = totals.reduce(0, +) / totals.count
             let spread = (totals.max() ?? 0) - (totals.min() ?? 0)
             let latestSubmittedAt = records.compactMap { $0.submittedAt }.max()
-            let combinedNotes = records
+
+            // Pull typed notes and auto-transcripts from each panelist's
+            // per-question entries (the top-level record.notes is unused), keeping
+            // the two streams separate end-to-end.
+            let allQuestionScores = records.flatMap { $0.questionScores }
+            let combinedNotes = allQuestionScores
                 .map { $0.notes }
+                .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .joined(separator: "\n")
+            let combinedTranscript = allQuestionScores
+                .map { $0.transcript }
                 .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
                 .joined(separator: "\n")
 
@@ -88,6 +98,7 @@ nonisolated final class CandidateRankingService {
                 interviewerId: records.count == 1 ? records[0].interviewerId : "",
                 questionScores: meanQuestionScores(questions: questions, records: records),
                 notes: combinedNotes,
+                transcript: combinedTranscript,
                 panelistCount: records.count,
                 scoreSpread: spread
             )
@@ -117,6 +128,7 @@ nonisolated final class CandidateRankingService {
                 interviewerId: candidate.interviewerId,
                 questionScores: candidate.questionScores,
                 notes: candidate.notes,
+                transcript: candidate.transcript,
                 panelistCount: candidate.panelistCount,
                 scoreSpread: candidate.scoreSpread
             )
@@ -243,7 +255,8 @@ nonisolated final class CandidateRankingService {
                         id: qid,
                         questionId: questionId,
                         score: score,
-                        notes: qs["notes"] as? String ?? ""
+                        notes: qs["notes"] as? String ?? "",
+                        transcript: qs["transcript"] as? String ?? ""
                     )
                 }
             }

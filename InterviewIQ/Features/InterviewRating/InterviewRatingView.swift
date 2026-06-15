@@ -76,7 +76,8 @@ struct LiveRatingScreen: View {
                                 set: { newScore in
                                     viewModel.updateScore(
                                         score: newScore,
-                                        notes: viewModel.currentScore?.notes ?? ""
+                                        notes: viewModel.currentScore?.notes ?? "",
+                                        transcript: viewModel.currentScore?.transcript ?? ""
                                     )
                                 }
                             ),
@@ -85,7 +86,18 @@ struct LiveRatingScreen: View {
                                 set: { newNotes in
                                     viewModel.updateScore(
                                         score: viewModel.currentScore?.score ?? 0,
-                                        notes: newNotes
+                                        notes: newNotes,
+                                        transcript: viewModel.currentScore?.transcript ?? ""
+                                    )
+                                }
+                            ),
+                            transcript: Binding(
+                                get: { viewModel.currentScore?.transcript ?? "" },
+                                set: { newTranscript in
+                                    viewModel.updateScore(
+                                        score: viewModel.currentScore?.score ?? 0,
+                                        notes: viewModel.currentScore?.notes ?? "",
+                                        transcript: newTranscript
                                     )
                                 }
                             )

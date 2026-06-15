@@ -30,6 +30,7 @@ private func makeRankedCandidate(
     rank: Int,
     submittedAt: Date? = nil,
     notes: String = "",
+    transcript: String = "",
     panelistCount: Int = 1,
     scoreSpread: Int = 0
 ) -> RankedCandidate {
@@ -42,6 +43,7 @@ private func makeRankedCandidate(
         interviewerId: "interviewer-1",
         questionScores: [],
         notes: notes,
+        transcript: transcript,
         panelistCount: panelistCount,
         scoreSpread: scoreSpread
     )
@@ -383,7 +385,15 @@ final class ReportExportServiceCSVTests: XCTestCase {
     func test_generateCSV_containsHeaderRow() throws {
         let url = try service.generateCSV(sessionTitle: "S", candidates: [])
         let lines = try csvLines(from: url)
-        XCTAssertTrue(lines.contains("Rank,Candidate Name,Total Score (%),Submitted At,Notes"))
+        XCTAssertTrue(lines.contains("Rank,Candidate Name,Total Score (%),Submitted At,Notes,Transcript"))
+    }
+
+    func test_generateCSV_includesTranscriptColumn() throws {
+        let candidate = makeRankedCandidate(name: "Alice", totalScore: 80, rank: 1,
+                                            transcript: "Discussed conflict resolution at length")
+        let url = try service.generateCSV(sessionTitle: "S", candidates: [candidate])
+        let content = try String(contentsOf: url, encoding: .utf8)
+        XCTAssertTrue(content.contains("Discussed conflict resolution at length"))
     }
 
     func test_generateCSV_containsSessionTitle() throws {

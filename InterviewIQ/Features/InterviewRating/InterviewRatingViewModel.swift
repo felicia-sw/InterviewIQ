@@ -110,10 +110,12 @@ final class LiveRatingVM {
 
     // MARK: - Scoring
 
-    func updateScore(score: Int, notes: String) {
+    func updateScore(score: Int, notes: String, transcript: String) {
         guard let q = currentQuestion, let candidate = currentCandidate else { return }
-        let clamped = max(1, min(score, q.maxScore))
-        scores[q.id] = QuestionScore(questionId: q.id, score: clamped, notes: notes)
+        // Keep 0 as "unanswered" so dictating/typing before scoring doesn't
+        // silently mark a question as scored 1.
+        let clamped = score <= 0 ? 0 : min(score, q.maxScore)
+        scores[q.id] = QuestionScore(questionId: q.id, score: clamped, notes: notes, transcript: transcript)
         saveLocally(for: candidate)
     }
 

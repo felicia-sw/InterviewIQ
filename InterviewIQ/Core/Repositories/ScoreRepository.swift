@@ -107,7 +107,8 @@ nonisolated final class ScoreRepository {
                 "id": qs.id,
                 "questionId": qs.questionId,
                 "score": qs.score,
-                "notes": qs.notes
+                "notes": qs.notes,
+                "transcript": qs.transcript
             ]
         }
 

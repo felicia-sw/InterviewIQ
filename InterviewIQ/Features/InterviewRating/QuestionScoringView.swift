@@ -10,19 +10,21 @@ struct QuestionScoringView: View {
     let totalQuestions: Int
     @Binding var score: Int
     @Binding var notes: String
+    @Binding var transcript: String
 
     @State private var showNotes = false
 
-    // Live dictation (Speech framework). `notesBase` is the typed text captured
-    // when dictation starts, so recognized speech is appended to — not replacing —
-    // anything already written.
+    // Live dictation (Speech framework) feeds the separate Transcript field.
+    // `transcriptBase` is whatever was already captured when dictation (re)starts,
+    // so recognized speech is appended rather than replacing it.
     @State private var dictation = SpeechDictationService()
-    @State private var notesBase = ""
+    @State private var transcriptBase = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: Studio.Spacing.lg) {
             questionHeader
             scoreSection
+            transcriptSection
             notesSection
         }
         .studioCard(radius: Studio.Radius.hero, padding: Studio.Spacing.lg)
@@ -81,59 +83,47 @@ struct QuestionScoringView: View {
 
     // MARK: - Notes (deferred)
 
-    private var notesSection: some View {
-        VStack(alignment: .leading, spacing: Studio.Spacing.sm) {
-            if showNotes || !notes.isEmpty || dictation.isRecording {
-                HStack {
-                    Text("Notes")
-                        .font(.subheadline).fontWeight(.medium)
-                    Spacer()
-                    dictationButton
-                }
+    // MARK: - Transcript (auto speech-to-text, separate from notes)
 
-                TextField("Add a comment about this answer…", text: $notes, axis: .vertical)
-                    .lineLimit(3...6)
+    private var transcriptSection: some View {
+        VStack(alignment: .leading, spacing: Studio.Spacing.sm) {
+            HStack {
+                Label("Transcript", systemImage: "waveform")
+                    .font(.subheadline).fontWeight(.medium)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                dictationButton
+            }
+
+            if transcript.isEmpty && !dictation.isRecording {
+                Text("Tap the mic to dictate what's said — captured separately from your notes.")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                TextField("Spoken answer transcript…", text: $transcript, axis: .vertical)
+                    .lineLimit(2...8)
                     .padding(Studio.Spacing.sm)
                     .background(Studio.Palette.fill,
                                 in: RoundedRectangle(cornerRadius: Studio.Radius.chip, style: .continuous))
+            }
 
-                if dictation.isRecording {
-                    Label("Listening… tap the mic to stop", systemImage: "waveform")
-                        .font(.caption).foregroundStyle(Studio.Palette.accent)
-                        .symbolEffect(.variableColor.iterative, isActive: true)
-                } else if let error = dictation.errorMessage {
-                    Text(error).font(.caption).foregroundStyle(Studio.Palette.scoreLow)
-                }
-            } else {
-                HStack(spacing: Studio.Spacing.md) {
-                    Button {
-                        withAnimation(.snappy) { showNotes = true }
-                    } label: {
-                        Label("Add note", systemImage: "plus")
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(Studio.Palette.accent)
-                    }
-                    .buttonStyle(.plain)
-
-                    Button {
-                        Task { await startDictation() }
-                    } label: {
-                        Label("Dictate", systemImage: "mic")
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(Studio.Palette.accent)
-                    }
-                    .buttonStyle(.plain)
-                }
+            if dictation.isRecording {
+                Label("Listening… tap the mic to stop", systemImage: "waveform")
+                    .font(.caption).foregroundStyle(Studio.Palette.accent)
+                    .symbolEffect(.variableColor.iterative, isActive: true)
+            } else if let error = dictation.errorMessage {
+                Text(error).font(.caption).foregroundStyle(Studio.Palette.scoreLow)
             }
         }
         .onChange(of: dictation.transcript) { _, spoken in
             guard dictation.isRecording else { return }
-            let base = notesBase.trimmingCharacters(in: .whitespacesAndNewlines)
-            notes = base.isEmpty ? spoken : base + " " + spoken
+            let base = transcriptBase.trimmingCharacters(in: .whitespacesAndNewlines)
+            transcript = base.isEmpty ? spoken : base + " " + spoken
         }
     }
 
-    // Mic toggle shown beside the Notes label while the field is visible.
+    // Mic toggle for the transcript field.
     private var dictationButton: some View {
         Button {
             Task {
@@ -152,13 +142,38 @@ struct QuestionScoringView: View {
         }
         .buttonStyle(.plain)
         .sensoryFeedback(.impact, trigger: dictation.isRecording)
-        .accessibilityLabel(dictation.isRecording ? "Stop dictation" : "Dictate note")
+        .accessibilityLabel(dictation.isRecording ? "Stop dictation" : "Start dictation")
     }
 
     private func startDictation() async {
-        notesBase = notes
-        withAnimation(.snappy) { showNotes = true }
+        transcriptBase = transcript
         await dictation.start()
+    }
+
+    // MARK: - Notes (typed, deferred)
+
+    private var notesSection: some View {
+        VStack(alignment: .leading, spacing: Studio.Spacing.sm) {
+            if showNotes || !notes.isEmpty {
+                Text("Notes")
+                    .font(.subheadline).fontWeight(.medium)
+
+                TextField("Add a comment about this answer…", text: $notes, axis: .vertical)
+                    .lineLimit(3...6)
+                    .padding(Studio.Spacing.sm)
+                    .background(Studio.Palette.fill,
+                                in: RoundedRectangle(cornerRadius: Studio.Radius.chip, style: .continuous))
+            } else {
+                Button {
+                    withAnimation(.snappy) { showNotes = true }
+                } label: {
+                    Label("Add note", systemImage: "plus")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(Studio.Palette.accent)
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 }
 
@@ -212,6 +227,7 @@ struct ScoreButtonRow: View {
 private struct ScoringPreviewHost: View {
     @State private var score = 4
     @State private var notes = ""
+    @State private var transcript = ""
 
     var body: some View {
         ScrollView {
@@ -223,7 +239,8 @@ private struct ScoringPreviewHost: View {
                 questionNumber: 3,
                 totalQuestions: 8,
                 score: $score,
-                notes: $notes
+                notes: $notes,
+                transcript: $transcript
             )
             .padding()
         }

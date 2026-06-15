@@ -320,17 +320,17 @@ private struct LedgerPreviewHost: View {
                         submittedAt: Date(), interviewerId: "x",
                         questionScores: [.init(questionId: "a", score: 5), .init(questionId: "b", score: 4),
                                          .init(questionId: "c", score: 5), .init(questionId: "d", score: 4)],
-                        notes: "", panelistCount: 3, scoreSpread: 6),
+                        notes: "", transcript: "", panelistCount: 3, scoreSpread: 6),
         RankedCandidate(id: "2", name: "Jordan Reyes", totalScore: 72, rank: 2,
                         submittedAt: Date(), interviewerId: "x",
                         questionScores: [.init(questionId: "a", score: 3), .init(questionId: "b", score: 4),
                                          .init(questionId: "c", score: 2), .init(questionId: "d", score: 5)],
-                        notes: "", panelistCount: 3, scoreSpread: 22),
+                        notes: "", transcript: "", panelistCount: 3, scoreSpread: 22),
         RankedCandidate(id: "3", name: "Sam Okafor", totalScore: 54, rank: 3,
                         submittedAt: Date(), interviewerId: "x",
                         questionScores: [.init(questionId: "a", score: 2), .init(questionId: "b", score: 3),
                                          .init(questionId: "c", score: 2)],
-                        notes: "", panelistCount: 2, scoreSpread: 10)
+                        notes: "", transcript: "", panelistCount: 2, scoreSpread: 10)
     ]
 
     var body: some View {

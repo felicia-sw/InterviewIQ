@@ -27,19 +27,21 @@ nonisolated final class ReportExportService {
         lines.append("")
 
         // Column headers
-        lines.append("Rank,Candidate Name,Total Score (%),Submitted At,Notes")
+        lines.append("Rank,Candidate Name,Total Score (%),Submitted At,Notes,Transcript")
 
         // Data rows
         for candidate in candidates {
             let submittedAt = candidate.submittedAt.map { formattedDate($0) } ?? "—"
             let notes = candidate.notes.isEmpty ? "—" : candidate.notes
+            let transcript = candidate.transcript.isEmpty ? "—" : candidate.transcript
             // Wrap fields containing commas/quotes in double-quotes
             let row = [
                 "\(candidate.rank)",
                 csvEscape(candidate.name),
                 "\(candidate.totalScore)",
                 csvEscape(submittedAt),
-                csvEscape(notes)
+                csvEscape(notes),
+                csvEscape(transcript)
             ].joined(separator: ",")
             lines.append(row)
         }
@@ -120,9 +122,11 @@ nonisolated final class ReportExportService {
                 yOffset += 24
             }
 
-            // Table Header
-            let colWidths: [CGFloat] = [40, 180, 90, 120, contentWidth - 430]
-            let colHeaders = ["Rank", "Candidate", "Score (%)", "Submitted", "Notes"]
+            // Table Header. Notes + Transcript split the remaining width evenly.
+            let fixed: CGFloat = 34 + 140 + 60 + 95
+            let split = (contentWidth - fixed) / 2
+            let colWidths: [CGFloat] = [34, 140, 60, 95, split, split]
+            let colHeaders = ["Rank", "Candidate", "Score (%)", "Submitted", "Notes", "Transcript"]
 
             UIColor(red: 79/255, green: 70/255, blue: 229/255, alpha: 0.1).setFill()
             UIBezierPath(rect: CGRect(x: margin, y: yOffset, width: contentWidth, height: 22)).fill()
@@ -160,13 +164,15 @@ nonisolated final class ReportExportService {
                 xCursor = margin + 6
                 let submittedText = candidate.submittedAt.map { formattedDate($0) } ?? "—"
                 let notesText = candidate.notes.isEmpty ? "—" : candidate.notes
+                let transcriptText = candidate.transcript.isEmpty ? "—" : candidate.transcript
 
                 let row: [(String, [NSAttributedString.Key: Any])] = [
                     ("#\(candidate.rank)", rankAttrs),
                     (candidate.name, tdAttrs),
                     ("\(candidate.totalScore)%", tdAttrs),
                     (submittedText, tdAttrs),
-                    (notesText, tdAttrs)
+                    (notesText, tdAttrs),
+                    (transcriptText, tdAttrs)
                 ]
 
                 for (i, (text, attrs)) in row.enumerated() {
