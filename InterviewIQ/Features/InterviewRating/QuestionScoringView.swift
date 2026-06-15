@@ -13,6 +13,12 @@ struct QuestionScoringView: View {
 
     @State private var showNotes = false
 
+    // Live dictation (Speech framework). `notesBase` is the typed text captured
+    // when dictation starts, so recognized speech is appended to — not replacing —
+    // anything already written.
+    @State private var dictation = SpeechDictationService()
+    @State private var notesBase = ""
+
     var body: some View {
         VStack(alignment: .leading, spacing: Studio.Spacing.lg) {
             questionHeader
@@ -77,26 +83,82 @@ struct QuestionScoringView: View {
 
     private var notesSection: some View {
         VStack(alignment: .leading, spacing: Studio.Spacing.sm) {
-            if showNotes || !notes.isEmpty {
-                Text("Notes")
-                    .font(.subheadline).fontWeight(.medium)
+            if showNotes || !notes.isEmpty || dictation.isRecording {
+                HStack {
+                    Text("Notes")
+                        .font(.subheadline).fontWeight(.medium)
+                    Spacer()
+                    dictationButton
+                }
 
                 TextField("Add a comment about this answer…", text: $notes, axis: .vertical)
                     .lineLimit(3...6)
                     .padding(Studio.Spacing.sm)
                     .background(Studio.Palette.fill,
                                 in: RoundedRectangle(cornerRadius: Studio.Radius.chip, style: .continuous))
-            } else {
-                Button {
-                    withAnimation(.snappy) { showNotes = true }
-                } label: {
-                    Label("Add note", systemImage: "plus")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(Studio.Palette.accent)
+
+                if dictation.isRecording {
+                    Label("Listening… tap the mic to stop", systemImage: "waveform")
+                        .font(.caption).foregroundStyle(Studio.Palette.accent)
+                        .symbolEffect(.variableColor.iterative, isActive: true)
+                } else if let error = dictation.errorMessage {
+                    Text(error).font(.caption).foregroundStyle(Studio.Palette.scoreLow)
                 }
-                .buttonStyle(.plain)
+            } else {
+                HStack(spacing: Studio.Spacing.md) {
+                    Button {
+                        withAnimation(.snappy) { showNotes = true }
+                    } label: {
+                        Label("Add note", systemImage: "plus")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(Studio.Palette.accent)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        Task { await startDictation() }
+                    } label: {
+                        Label("Dictate", systemImage: "mic")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(Studio.Palette.accent)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
         }
+        .onChange(of: dictation.transcript) { _, spoken in
+            guard dictation.isRecording else { return }
+            let base = notesBase.trimmingCharacters(in: .whitespacesAndNewlines)
+            notes = base.isEmpty ? spoken : base + " " + spoken
+        }
+    }
+
+    // Mic toggle shown beside the Notes label while the field is visible.
+    private var dictationButton: some View {
+        Button {
+            Task {
+                if dictation.isRecording { dictation.stop() } else { await startDictation() }
+            }
+        } label: {
+            Image(systemName: dictation.isRecording ? "mic.fill" : "mic")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(dictation.isRecording ? .white : Studio.Palette.accent)
+                .frame(width: 34, height: 34)
+                .background {
+                    Circle().fill(dictation.isRecording
+                                  ? AnyShapeStyle(Studio.accentGradient)
+                                  : AnyShapeStyle(Studio.Palette.fill))
+                }
+        }
+        .buttonStyle(.plain)
+        .sensoryFeedback(.impact, trigger: dictation.isRecording)
+        .accessibilityLabel(dictation.isRecording ? "Stop dictation" : "Dictate note")
+    }
+
+    private func startDictation() async {
+        notesBase = notes
+        withAnimation(.snappy) { showNotes = true }
+        await dictation.start()
     }
 }
 

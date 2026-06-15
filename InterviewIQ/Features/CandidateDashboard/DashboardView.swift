@@ -22,6 +22,9 @@ struct DashboardComparisonView: View {
     @State private var showShareSheet: Bool = false
     @State private var showExportFormatSheet: Bool = false
 
+    // Tapping a ranking row opens its notes + on-device AI summary.
+    @State private var summaryCandidate: RankedCandidate?
+
     var body: some View {
         Group {
             if viewModel.isLoading {
@@ -61,6 +64,10 @@ struct DashboardComparisonView: View {
             if let url = exportedURL {
                 ShareSheet(url: url)
             }
+        }
+        // Candidate notes + AI summary
+        .sheet(item: $summaryCandidate) { candidate in
+            CandidateSummarySheet(candidate: candidate)
         }
         // Error
         .alert("Export Failed", isPresented: $viewModel.showExportError) {
@@ -176,9 +183,19 @@ struct DashboardComparisonView: View {
 
             VStack(spacing: Studio.Spacing.xs) {
                 ForEach(viewModel.rankedCandidates) { candidate in
-                    LedgerRow(candidate: candidate)
+                    Button {
+                        summaryCandidate = candidate
+                    } label: {
+                        LedgerRow(candidate: candidate)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
+
+            Text("Tap a candidate to read notes and generate an AI summary.")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .padding(.horizontal, Studio.Spacing.xxs)
         }
     }
 
