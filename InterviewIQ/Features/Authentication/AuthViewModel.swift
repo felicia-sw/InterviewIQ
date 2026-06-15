@@ -139,11 +139,13 @@ class AuthViewModel: ObservableObject {
             return
         }
         
-        // Server-side Database Duplicate Verification
         do {
-            let alreadyHasUsers = (try? await userRepository.hasAnyUsers()) ?? true
-            let assignedRole: UserRole = alreadyHasUsers ? .interviewer : .admin
-
+            // Role is NOT chosen by the client: the security rules only permit
+            // registering as `interviewer`, which closes the hole where a new
+            // user could self-select `admin`. Promotion to admin is done out of
+            // band (Firebase console, or a Cloud Function via the Admin SDK,
+            // which bypasses the rules). Session ownership is per-session anyway
+            // (adminId), so a fresh interviewer can still create and own sessions.
             let result = try await Auth.auth().createUser(withEmail: emailAddress, password: userPassword)
 
             // Persist the profile so role + name survive beyond the Auth record.
@@ -151,7 +153,7 @@ class AuthViewModel: ObservableObject {
                 userId: result.user.uid,
                 fullName: fullName.trimmingCharacters(in: .whitespacesAndNewlines),
                 emailAddress: emailAddress.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-                role: assignedRole,
+                role: .interviewer,
                 isActive: true
             )
             try await userRepository.saveProfile(profile)

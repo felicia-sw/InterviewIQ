@@ -36,13 +36,15 @@
         "fullName":     { ".validate": "newData.isString() && newData.val().length > 0" },
         "emailAddress": { ".validate": "newData.isString() && newData.val().length > 0" },
 
-        // Role + active flag can be SET at registration but never CHANGED by the
-        // user afterwards (prevents an interviewer self-promoting to admin or a
-        // deactivated user reactivating). NOTE: a brand-new registrant can still
-        // choose 'admin' at creation — move role assignment to a Cloud Function
-        // or custom claims for true server-side control.
+        // Clients may ONLY register as 'interviewer'; they can never set 'admin'
+        // at creation, nor change their role afterwards. This closes the hole
+        // where a new registrant could self-promote to admin. Granting admin is
+        // done out of band — from the Firebase console, or by a Cloud Function
+        // using the Admin SDK, both of which bypass these rules. (Session
+        // ownership is per-session via adminId, so an interviewer can still
+        // create and own sessions without a global admin role.)
         "role": {
-          ".validate": "(newData.val() === 'admin' || newData.val() === 'interviewer') && (!data.exists() || newData.val() === data.val())"
+          ".validate": "!data.exists() ? newData.val() === 'interviewer' : newData.val() === data.val()"
         },
         "isActive": {
           ".validate": "newData.isBoolean() && (!data.exists() || newData.val() === data.val())"
