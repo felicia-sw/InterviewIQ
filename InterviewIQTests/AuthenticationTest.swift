@@ -13,26 +13,24 @@ final class AuthenticationTest: XCTestCase {
     // SUT = System Under Test
     var sut: AuthViewModel!
 
-    // This runs automatically BEFORE every single test case
     override func setUp() {
         super.setUp()
         sut = AuthViewModel()
     }
 
-    // This runs automatically AFTER every single test case
     override func tearDown() {
         sut = nil
         super.tearDown()
     }
 
-    // MARK: - 1. SIGN UP / REGISTRATION TESTS
+    // MARK: - Registration validation (deterministic — returns before any network call)
 
-    /// Scenario: Password too short
+    /// Scenario: Password too short. Validation must fail before Firebase is touched.
     func test_performRegistration_whenPasswordIsTooShort_shouldFailValidation() async {
         // GIVEN
         sut.fullName = "Alex Smith"
         sut.emailAddress = "alex@interviewiq.com"
-        sut.userPassword = "123" // ❌ Invalid: Less than 6 characters
+        sut.userPassword = "123" // ❌ Invalid: fewer than 6 characters
 
         // WHEN
         await sut.performRegistration()
@@ -44,74 +42,95 @@ final class AuthenticationTest: XCTestCase {
         XCTAssertFalse(sut.hasSuccessfullyRegistered)
     }
 
-    // MARK: - 2. SIGN IN & LOCKOUT TESTS
+    // MARK: - Email normalization
 
-    /// Scenario: Verifies that entering the wrong password increments the internal tracking footprint
-    func test_performLogin_withWrongPassword_shouldIncrementFailedAttemptsAndShowError() async {
-        // GIVEN
-        sut.emailAddress = "testuser@interviewiq.com"
-        sut.userPassword = "wrong_password_attempt"
-
-        // WHEN
-        await sut.performLogin()
-
-        // THEN
-        XCTAssertTrue(sut.hasAuthenticationError)
-        XCTAssertEqual(sut.errorMessage, "Invalid credentials. Please check your email and password.")
-        XCTAssertFalse(sut.isLoading)
-        XCTAssertFalse(sut.isAccountLocked, "Should not be locked out on the 1st failed attempt")
+    /// The lockout key is derived from a trimmed, lowercased email, so different
+    /// casings/whitespace must collapse to the same database lookup key.
+    func test_emailNormalization_producesIdenticalLookupKeys() {
+        let first  = "Tester@InterviewIQ.com ".trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let second = "tester@interviewiq.com".trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        XCTAssertEqual(first, second, "Email normalization must yield identical keys.")
     }
+}
 
-    /// Scenario: Verifies that hitting exactly 5 bad attempts blocks the account completely
-    func test_performLogin_whenFailed5Times_shouldTriggerAccountLockout() async {
-        // GIVEN
-        sut.emailAddress = "target@interviewiq.com"
-        sut.userPassword = "incorrect_password"
+// MARK: - Login Lockout Policy (deterministic, no network)
+//
+// The brute-force lockout behaviour used to be verified by driving real Firebase
+// logins five times — slow, and flaky once Firebase rate-limits the failed
+// attempts. The policy now lives in `LoginLockoutGuard`, a pure value type we can
+// exercise directly with injected timestamps, so these tests are fast and stable.
 
-        // WHEN: Simulate running the login function 5 times consecutively
-        for _ in 1...5 {
-            await sut.performLogin()
+final class LoginLockoutGuardTests: XCTestCase {
+
+    private let email = "user@interviewiq.com"
+
+    func test_belowThreshold_doesNotLock() {
+        var tracker = LoginLockoutGuard()
+        // One short of the threshold (4 failures) must NOT lock.
+        for _ in 1 ..< LoginLockoutGuard.maxAttempts {
+            XCTAssertFalse(tracker.registerFailure(for: email))
         }
-
-        // THEN
-        XCTAssertTrue(sut.isAccountLocked, "Account should be locked precisely on the 5th attempt")
-        XCTAssertTrue(sut.hasAuthenticationError)
-        XCTAssertEqual(sut.errorMessage, "Account locked after 5 failed attempts. Please try again in 15 minutes.")
+        XCTAssertFalse(tracker.isLocked(for: email))
+        XCTAssertNil(tracker.activeLockMinutes(for: email))
     }
 
-    /// Scenario: Tests the Pre-Auth Gatekeeper Interceptor
-    func test_performLogin_whenAlreadyLockedOut_shouldExitEarlyWithoutNetworkCall() async {
-        // GIVEN: Drive the email into a locked state first
-        sut.emailAddress = "locked@interviewiq.com"
-        sut.userPassword = "bad_password"
-        
-        for _ in 1...5 {
-            await sut.performLogin()
+    func test_locksExactlyOnFifthFailure() {
+        var tracker = LoginLockoutGuard()
+        var tripped = false
+        for _ in 1 ... LoginLockoutGuard.maxAttempts {
+            tripped = tracker.registerFailure(for: email)
         }
-        
-        // Confirm it is locked
-        XCTAssertTrue(sut.isAccountLocked)
-
-        // WHEN: Try to log in again while the lockout is active
-        sut.userPassword = "AnyPassword"
-        await sut.performLogin()
-
-        // THEN: Check if the early return statement catches it dynamically
-        XCTAssertTrue(sut.isAccountLocked)
-        XCTAssertTrue(sut.errorMessage.contains("Account temporarily locked for 15 minutes."))
+        XCTAssertTrue(tripped, "The 5th failed attempt should trip the lock.")
+        XCTAssertTrue(tracker.isLocked(for: email))
     }
-    
-    /// Scenario: Tests that email normalization functions correctly across casing variances
-    func test_emailNormalization_shouldTrackLockoutRegardlessOfCasing() async {
-        // 1. Test first format input
-        sut.emailAddress = "Tester@InterviewIQ.com "
-        let firstCleaned = sut.emailAddress.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        
-        // 2. Test second format input
-        sut.emailAddress = "tester@interviewiq.com"
-        let secondCleaned = sut.emailAddress.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        
-        // ASSERT: Ensure your normalization logic produces identical database lookup keys
-        XCTAssertEqual(firstCleaned, secondCleaned, "The email normalization failed to match formatting outputs.")
+
+    func test_activeLockMinutes_reportsFifteen() {
+        var tracker = LoginLockoutGuard()
+        let start = Date()
+        for _ in 1 ... LoginLockoutGuard.maxAttempts {
+            tracker.registerFailure(for: email, now: start)
+        }
+        // Queried at the same instant the lock was set → full 15 minutes remain.
+        XCTAssertEqual(tracker.activeLockMinutes(for: email, now: start), 15)
+    }
+
+    func test_expiredLock_autoClearsAndUnlocks() {
+        var tracker = LoginLockoutGuard()
+        let start = Date()
+        for _ in 1 ... LoginLockoutGuard.maxAttempts {
+            tracker.registerFailure(for: email, now: start)
+        }
+        XCTAssertTrue(tracker.isLocked(for: email, now: start))
+
+        // 16 minutes later the 15-minute window has elapsed.
+        let later = start.addingTimeInterval(16 * 60)
+        XCTAssertFalse(tracker.isLocked(for: email, now: later))
+        XCTAssertNil(tracker.activeLockMinutes(for: email, now: later))
+    }
+
+    func test_reset_clearsFailuresAndLock() {
+        var tracker = LoginLockoutGuard()
+        for _ in 1 ... LoginLockoutGuard.maxAttempts {
+            tracker.registerFailure(for: email)
+        }
+        XCTAssertTrue(tracker.isLocked(for: email))
+
+        tracker.reset(for: email)
+        XCTAssertFalse(tracker.isLocked(for: email))
+
+        // After a reset it takes a fresh run of failures to lock again.
+        for _ in 1 ..< LoginLockoutGuard.maxAttempts {
+            XCTAssertFalse(tracker.registerFailure(for: email))
+        }
+    }
+
+    func test_lockout_isolatesPerEmail() {
+        var tracker = LoginLockoutGuard()
+        for _ in 1 ... LoginLockoutGuard.maxAttempts {
+            tracker.registerFailure(for: "a@interviewiq.com")
+        }
+        XCTAssertTrue(tracker.isLocked(for: "a@interviewiq.com"))
+        XCTAssertFalse(tracker.isLocked(for: "b@interviewiq.com"),
+                       "Locking one email must never lock a different one.")
     }
 }

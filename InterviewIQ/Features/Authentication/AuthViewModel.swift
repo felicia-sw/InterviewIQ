@@ -21,8 +21,10 @@ class AuthViewModel: ObservableObject {
     @Published var passwordResetMessage = ""
 
     // MARK: - Core Security Storage (Per-Account Lock Tracking)
-    private var accountFailedAttempts: [String: Int] = [:]
-    private var accountLockExpirations: [String: Date] = [:]
+    // Lockout bookkeeping lives in a small value type so the policy (when an
+    // account locks, for how long, per email) can be unit-tested deterministically
+    // — without driving real Firebase logins, which are slow and rate-limited.
+    private var lockoutGuard = LoginLockoutGuard()
 
     // MARK: - Profile Persistence
     private let userRepository = UserRepository()
@@ -37,24 +39,15 @@ class AuthViewModel: ObservableObject {
     func performLogin() async {
         let normalizedEmail = emailAddress.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         
-        // 1. Pre-Auth Security Gatekeeper: Check lock status for this specific email identifier
-        if let lockExpiry = accountLockExpirations[normalizedEmail] {
-            if Date() < lockExpiry {
-                let remainingSeconds = lockExpiry.timeIntervalSince(Date())
-                let remainingMinutes = Int(ceil(remainingSeconds / 60.0))
-                
-                await MainActor.run {
-                    self.isAccountLocked = true
-                    self.hasAuthenticationError = true
-                    self.errorMessage = "Account temporarily locked for 15 minutes. Try again in \(remainingMinutes) min(s)."
-                }
-                return
-            } else {
-                // Lock has naturally expired out of the 15-minute window; reset account access
-                accountLockExpirations.removeValue(forKey: normalizedEmail)
-                accountFailedAttempts[normalizedEmail] = 0
-                await MainActor.run { self.isAccountLocked = false }
+        // 1. Pre-Auth Security Gatekeeper: Check lock status for this specific email
+        // identifier. A naturally-expired lock is cleared inside the guard.
+        if let remainingMinutes = lockoutGuard.activeLockMinutes(for: normalizedEmail) {
+            await MainActor.run {
+                self.isAccountLocked = true
+                self.hasAuthenticationError = true
+                self.errorMessage = "Account temporarily locked for 15 minutes. Try again in \(remainingMinutes) min(s)."
             }
+            return
         }
         
         // 2. Initialize processing UI state
@@ -70,8 +63,7 @@ class AuthViewModel: ObservableObject {
             let result = try await Auth.auth().signIn(withEmail: emailAddress, password: userPassword)
 
             // On Authentication Success: Flush failed records for this email
-            accountFailedAttempts[normalizedEmail] = 0
-            accountLockExpirations.removeValue(forKey: normalizedEmail)
+            lockoutGuard.reset(for: normalizedEmail)
 
             await auditLogger.log(
                 .loginSucceeded,
@@ -107,35 +99,19 @@ class AuthViewModel: ObservableObject {
                     // Scenario A: Nonexistent email. Fail immediately with NO lockout modification.
                     self.errorMessage = "Invalid credentials. Please check your email and password."
                     
-                case AuthErrorCode.wrongPassword.rawValue:
-                    // Scenario B: Valid email, wrong password. Increment this email's tracking footprint.
-                    let currentAttempts = (accountFailedAttempts[normalizedEmail] ?? 0) + 1
-                    accountFailedAttempts[normalizedEmail] = currentAttempts
-                    
-                    if currentAttempts >= 5 {
-                        // Exactly on the 5th attempt: Lock this specific key for 15 minutes
-                        let unlockTimestamp = Date().addingTimeInterval(15 * 60) // 15 mins = 900 seconds
-                        accountLockExpirations[normalizedEmail] = unlockTimestamp
+                case AuthErrorCode.wrongPassword.rawValue,
+                     AuthErrorCode.invalidCredential.rawValue:
+                    // Valid email + wrong password, OR the enumeration-protection
+                    // fallback code Firebase returns when that setting is enabled.
+                    // Either way this is a real bad-credential attempt: count it,
+                    // and lock the account once it crosses the threshold.
+                    if lockoutGuard.registerFailure(for: normalizedEmail) {
                         self.isAccountLocked = true
                         self.errorMessage = "Account locked after 5 failed attempts. Please try again in 15 minutes."
                     } else {
                         self.errorMessage = "Invalid credentials. Please check your email and password."
                     }
-                    
-                case AuthErrorCode.invalidCredential.rawValue:
-                    // Guard fallback if User Enumeration Protection remains enabled on Firebase Console
-                    let currentAttempts = (accountFailedAttempts[normalizedEmail] ?? 0) + 1
-                    accountFailedAttempts[normalizedEmail] = currentAttempts
-                    
-                    if currentAttempts >= 5 {
-                        let unlockTimestamp = Date().addingTimeInterval(15 * 60)
-                        accountLockExpirations[normalizedEmail] = unlockTimestamp
-                        self.isAccountLocked = true
-                        self.errorMessage = "Account locked after 5 failed attempts. Please try again in 15 minutes."
-                    } else {
-                        self.errorMessage = "Invalid credentials. Please check your email and password."
-                    }
-                    
+
                 default:
                     // Catch-all general system/network level faults
                     self.errorMessage = error.localizedDescription
@@ -257,5 +233,60 @@ class AuthViewModel: ObservableObject {
             self.passwordResetMessage = "If an account exists for \(normalizedEmail), a password reset link is on its way. Check your inbox and spam folder."
             self.showPasswordResetConfirmation = true
         }
+    }
+}
+
+// MARK: - Login Lockout Policy
+
+/// Per-email brute-force lockout bookkeeping, extracted from `AuthViewModel` so
+/// the policy is pure, synchronous, and unit-testable without any Firebase calls.
+/// `nonisolated` keeps it usable from any context (and off the project-wide
+/// `MainActor` default). All time is injectable via `now:` so tests are deterministic.
+nonisolated struct LoginLockoutGuard {
+    /// Failed attempts before an account is locked.
+    static let maxAttempts = 5
+    /// How long a lock lasts once tripped.
+    static let lockDuration: TimeInterval = 15 * 60
+
+    private var failedAttempts: [String: Int] = [:]
+    private var lockExpirations: [String: Date] = [:]
+
+    init() {}
+
+    /// If the email is currently locked, returns the whole minutes remaining
+    /// (rounded up). If the lock has expired, it is cleared and `nil` is returned.
+    mutating func activeLockMinutes(for email: String, now: Date = Date()) -> Int? {
+        guard let expiry = lockExpirations[email] else { return nil }
+        if now < expiry {
+            return Int(ceil(expiry.timeIntervalSince(now) / 60.0))
+        }
+        // Lock has aged out of its window — reset access for this email.
+        reset(for: email)
+        return nil
+    }
+
+    /// Records one failed attempt for the email. Returns `true` if this attempt
+    /// trips the lock (i.e. reaches `maxAttempts`).
+    @discardableResult
+    mutating func registerFailure(for email: String, now: Date = Date()) -> Bool {
+        let attempts = (failedAttempts[email] ?? 0) + 1
+        failedAttempts[email] = attempts
+        if attempts >= Self.maxAttempts {
+            lockExpirations[email] = now.addingTimeInterval(Self.lockDuration)
+            return true
+        }
+        return false
+    }
+
+    /// Clears all failure/lock state for the email (called on successful login).
+    mutating func reset(for email: String) {
+        failedAttempts[email] = 0
+        lockExpirations.removeValue(forKey: email)
+    }
+
+    /// Whether the email is locked right now (without mutating state).
+    func isLocked(for email: String, now: Date = Date()) -> Bool {
+        guard let expiry = lockExpirations[email] else { return false }
+        return now < expiry
     }
 }
