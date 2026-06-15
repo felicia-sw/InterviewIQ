@@ -70,6 +70,9 @@ private final class AppAuthState {
 struct ContentView: View {
     @State private var authState = AppAuthState()
 
+    // First-run welcome, shown once after the first successful login.
+    @AppStorage("studio.hasSeenWelcome") private var hasSeenWelcome = false
+
     var body: some View {
         if !authState.isLoggedIn {
             NavigationView {
@@ -80,9 +83,16 @@ struct ContentView: View {
         } else if let profile = authState.profile, profile.isActive {
             // All authenticated users go to the unified session dashboard (Q1-B).
             // Session ownership is determined per-session, not by a global role.
-            SessionDashboardView(
-                viewModel: SessionDashboardVM(userId: profile.userId)
-            )
+            // First launch shows a one-time, role-aware welcome.
+            if hasSeenWelcome {
+                SessionDashboardView(
+                    viewModel: SessionDashboardVM(userId: profile.userId)
+                )
+            } else {
+                WelcomeView(profile: profile) {
+                    withAnimation(.easeInOut) { hasSeenWelcome = true }
+                }
+            }
         } else if authState.profile?.isActive == false {
             accountIssue(
                 title: "Account Deactivated",
