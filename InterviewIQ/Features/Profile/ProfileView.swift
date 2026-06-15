@@ -22,6 +22,7 @@ struct ProfileView: View {
                     } else if let profile {
                         profileHeader(profile)
                         infoCard(profile)
+                        activityLogLink
                         logoutButton
                     } else {
                         ContentUnavailableView(
@@ -102,6 +103,31 @@ struct ProfileView: View {
                 .multilineTextAlignment(.trailing)
         }
         .padding(Studio.Spacing.md)
+    }
+
+    // MARK: - Activity Log
+
+    private var activityLogLink: some View {
+        NavigationLink {
+            AuditLogView()
+        } label: {
+            HStack(spacing: Studio.Spacing.md) {
+                Image(systemName: "clock.arrow.circlepath")
+                    .font(.body)
+                    .foregroundStyle(Studio.Palette.accent)
+                    .frame(width: 24)
+                Text("Activity Log")
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(Studio.Spacing.md)
+            .studioCard(padding: 0)
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Logout
